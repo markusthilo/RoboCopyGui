@@ -53,13 +53,14 @@ class WorkThread(Thread):
 class Gui(Tk):
 	'''GUI look and feel'''
 
-	def __init__(self, icon_path, version, config, gui_defs, labels):
+	def __init__(self, app_path, icon_path, version, config, gui_defs, labels):
 		'''Open application window'''
 		super().__init__()
 		self.config = config
 		self.labels = labels
 		self._defs = gui_defs
-		self.title(f'RoboCopy GUI v{version}')
+		self._work_thread = None
+		self.title(f'{self.labels.app_title} v{version}')
 		self.rowconfigure(0, weight=1)
 		self.columnconfigure(1, weight=1)
 		self.rowconfigure(5, weight=1)
@@ -74,17 +75,17 @@ class Gui(Tk):
 		self.geometry(f'{min_size_x}x{min_size_y}')
 		self.resizable(True, True)
 		self._pad = int(font_size * self._defs.pad_factor)
-		self._source_dir_button = Button(self, text=self.labels.source_dir, command=self._select_dir)
+		self._source_dir_button = Button(self, text=self.labels.directory, command=self._select_dir)
 		self._source_dir_button.grid(row=0, column=0, sticky='nw', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
-		Hovertip(self._source_dir_button, self.labels.source_tip)
-
-
-		self._source_button = Button(self, text=self.labels.source_dir, command=self._select_dir)
-		self._source_button.grid(row=0, column=0, sticky='nw', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
-		Hovertip(self._source_button, self.labels.source_tip)
-
+		Hovertip(self._source_dir_button, self.labels.source_dir_tip)
+		self._source_file_button = Button(self, text=self.labels.file_s, command=self._select_files)
+		self._source_file_button.grid(row=1, column=0, sticky='nw', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+		Hovertip(self._source_file_button, self.labels.source_file_tip)
 		self._source_text = ScrolledText(self, font=(font_family, font_size), padx=self._pad, pady=self._pad)
-		self._source_text.grid(row=0, column=1, sticky='nsew', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+		self._source_text.grid(row=0, column=1, rowspan=2, sticky='nsew', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+
+		'''
+
 		label = Label(self, text=self.labels.user_label)
 		label.grid(row=1, column=0, sticky='w', padx=self._pad, pady=self._pad)
 		Hovertip(label, self.labels.user_tip)
@@ -103,7 +104,7 @@ class Gui(Tk):
 		frame = Frame(self)
 		frame.grid(row=3, column=1, sticky='w', pady=(self._pad, 0))
 
-		'''
+		
 		self.write_trigger = BooleanVar(value=trigger)
 		button = Checkbutton(frame, text=self.labels.trigger_button, variable=self.write_trigger)
 		button.grid(row=0, column=0, sticky='w', padx=self._pad)
@@ -139,17 +140,12 @@ class Gui(Tk):
 		self._label_bg = self._info_label.cget('background')
 		self._quit_button = Button(self, text=self.labels.quit, command=self._quit_app)
 		self._quit_button.grid(row=6, column=1, sticky='e', padx=self._pad, pady=self._pad)
-		
-
-		self._work_thread = None
-		self._ignore_warning = False
 		self._init_warning()
 
 	def _get_source_paths(self):
 		'''Read directory paths from text field'''
-		text = self._source_text.get('1.0', 'end').strip()
-		if text:
-			return [Path(source_dir.strip()) for source_dir in text.split('\n')]
+		if text := self._source_text.get('1.0', 'end').strip()
+			return [Path(source.strip()) for source in text.split('\n')]
 
 	def _add_dir(self, dir_path):
 		'''Add directory into field'''
@@ -178,6 +174,12 @@ class Gui(Tk):
 
 	def _select_dir(self):
 		'''Select directory to add into field'''
+		directory = askdirectory(title=self.labels.select_dir, mustexist=True)
+		if directory:
+			self._add_dir(Path(directory))
+
+	def _select_files(self):
+		'''Select file(s) to add into field'''
 		directory = askdirectory(title=self.labels.select_dir, mustexist=True)
 		if directory:
 			self._add_dir(Path(directory))
@@ -213,6 +215,13 @@ class Gui(Tk):
 		if self._info_newline:
 			self._info_text.yview('end')
 		self._info_newline = end != '\r'
+
+	#			index = 0
+	#		while self.is_alive():
+	#			echo('-\\|/'[index], end='\r')
+	#			sleep(.25)
+	#			index = index + 1 if index < 3 else 0
+	#		self.join()
 
 	def _clear_info(self):
 		'''Clear info text'''
@@ -289,10 +298,11 @@ class Gui(Tk):
 			if not askyesno(title=self.labels.warning, message=self.labels.running_warning):
 				return
 			self._work_thread.kill()
-		self.config.user = self.user.get()
-		self.config.destination = self.destination.get()
-		try:
-			self.config.save()
-		except:
-			pass
+		#self.config.user = self.user.get()
+		#self.config.destination = self.destination.get()
+		#try:
+		#	self.config.save()
+		#except:
+		#	pass
+		
 		self.destroy()

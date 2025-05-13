@@ -1,6 +1,9 @@
 {
-    "source_dir": "Quellverzeichnis",
-    "source_tip": "Füge das zu kopierende Verzeichnis hinzu (POLIKS-Vorgangsnummer).",
+    "app_title": "RoboCopy GUI",
+    "directory": "Verzeichnis",
+    "source_dir_tip": "Füge zu kopierendes Verzeichnis hinzu",
+    "file_s": "Datei(en)",
+    "source_file_tip": "Füge zu kopierende Datei oder Dateien hinzu.",
     "user_label": "Bearbeiter:",
     "user_tip": "E-Mail-Adresse:",
     "destination": "Zielverzeichnis:",
