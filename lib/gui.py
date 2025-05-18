@@ -6,19 +6,27 @@ from threading import Thread, Event
 from pathlib import Path
 from tkinter import Tk, PhotoImage, StringVar, BooleanVar
 from tkinter.font import nametofont
-from tkinter.ttk import Frame, Label, Entry, Button, Checkbutton, OptionMenu
+from tkinter.ttk import Frame, Label, Entry, Button, Combobox
 from tkinter.scrolledtext import ScrolledText
 from tkinter.messagebox import askyesno, showerror
-from tkinter.filedialog import askdirectory, asksaveasfilename
+from tkinter.filedialog import askdirectory, askopenfilenames, asksaveasfilename
 from idlelib.tooltip import Hovertip
+from lib.hashes import FileHash
 #from lib.worker import Worker
 
 class WorkThread(Thread):
 	'''Thread that does the work while Tk is running the GUI'''
 
-	def __init__(self, gui):
+	def __init__(self, src_paths, dst_path,
+		log_path = None,
+		echo = print,
+		finish = None,
+	):
 		'''Pass all attributes from GUI to work thread'''
-		self._gui = gui
+		print(src_paths)
+		print(dst_paths)
+		finish(None)
+		return
 		super().__init__()
 		self._kill_event = Event()
 		self._worker = Worker(gui.app_path, gui.config, gui.labels,
@@ -53,7 +61,7 @@ class WorkThread(Thread):
 class Gui(Tk):
 	'''GUI look and feel'''
 
-	def __init__(self, app_path, icon_path, version, config, gui_defs, labels):
+	def __init__(self, app_path, version, config, gui_defs, labels):
 		'''Open application window'''
 		super().__init__()
 		self.config = config
@@ -64,7 +72,7 @@ class Gui(Tk):
 		self.rowconfigure(0, weight=1)
 		self.columnconfigure(1, weight=1)
 		self.rowconfigure(5, weight=1)
-		self.iconphoto(True, PhotoImage(file=icon_path))
+		self.iconphoto(True, PhotoImage(file=app_path / self._defs.appicon))
 		self.protocol('WM_DELETE_WINDOW', self._quit_app)
 		font = nametofont('TkTextFont').actual()
 		font_family = font['family']
@@ -75,57 +83,45 @@ class Gui(Tk):
 		self.geometry(f'{min_size_x}x{min_size_y}')
 		self.resizable(True, True)
 		self._pad = int(font_size * self._defs.pad_factor)
-		self._source_dir_button = Button(self, text=self.labels.directory, command=self._select_dir)
-		self._source_dir_button.grid(row=0, column=0, sticky='nw', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+		frame = Frame(self)
+		frame.grid(row=0, column=0, sticky='nw')
+		self._source_dir_button = Button(frame, text=self.labels.directory, command=self._select_dir)
+		self._source_dir_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_dir_button, self.labels.source_dir_tip)
-		self._source_file_button = Button(self, text=self.labels.file_s, command=self._select_files)
-		self._source_file_button.grid(row=1, column=0, sticky='nw', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+		self._source_file_button = Button(frame, text=self.labels.file_s, command=self._select_files)
+		self._source_file_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_file_button, self.labels.source_file_tip)
-		self._source_text = ScrolledText(self, font=(font_family, font_size), padx=self._pad, pady=self._pad)
-		self._source_text.grid(row=0, column=1, rowspan=2, sticky='nsew', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
-
-		'''
-
-		label = Label(self, text=self.labels.user_label)
-		label.grid(row=1, column=0, sticky='w', padx=self._pad, pady=self._pad)
-		Hovertip(label, self.labels.user_tip)
+		self._source_text = ScrolledText(self, font=(font_family, font_size))
+		self._source_text.grid(row=0, column=1, sticky='nsew', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+		self._destination_button = Button(self, text=self.labels.destination, command=self._select_destination)
+		self._destination_button.grid(row=1, column=0, sticky='nw', padx=self._pad, pady=self._pad)
+		self._destination = StringVar()
+		self._destination_entry = Entry(self, textvariable=self._destination)
+		self._destination_entry.grid(row=1, column=1, sticky='nsew', padx=self._pad, pady=self._pad)
 		frame = Frame(self)
-		frame.grid(row=1, column=1, sticky='w', padx=self._pad)
-		self.user = StringVar(value=self.config.user)
-		Entry(frame, textvariable=self.user, width=self._defs.user_width).pack(side='left', anchor='w')
-		Label(frame, text=f'@{self.config.domain}').pack(side='right', anchor='w')
-		label = Label(self, text=self.labels.destination)
-		label.grid(row=2, column=0, sticky='w', padx=self._pad)
-		Hovertip(label, self.labels.destination_tip)
-		self.destination = StringVar()
-		OptionMenu(self, self.destination, self.config.destination, *self.config.destinations
-			).grid(row=2, column=1, sticky='w', padx=self._pad)
-		Label(self, text=self.labels.options).grid(row=3, column=0, sticky='nw', padx=self._pad, pady=(self._pad, 0))
-		frame = Frame(self)
-		frame.grid(row=3, column=1, sticky='w', pady=(self._pad, 0))
-
-		
-		self.write_trigger = BooleanVar(value=trigger)
-		button = Checkbutton(frame, text=self.labels.trigger_button, variable=self.write_trigger)
-		button.grid(row=0, column=0, sticky='w', padx=self._pad)
-		Hovertip(button, self.labels.trigger_tip)
-		self.send_finished = BooleanVar(value=finished)
-		button = Checkbutton(frame, text=self.labels.finished_button, variable=self.send_finished)
-		button.grid(row=0, column=1, sticky='w', padx=self._pad)
-		Hovertip(button, self.labels.finished_tip)
-		self.send_done = BooleanVar(value=done)
-		button = Checkbutton(frame, text=self.labels.done_button, variable=self.send_done)
-		button.grid(row=1, column=0, sticky='w', padx=self._pad)
-		Hovertip(button, self.labels.done_tip)
-		self.write_log = BooleanVar(value=bool(log))
-		button = Checkbutton(frame, text=self.labels.log_button, variable=self.write_log, comman=self._select_log)
-		button.grid(row=1, column=1, sticky='w', padx=self._pad)
-		Hovertip(button, self.labels.log_tip)
-		'''
-
-		self._exec_button = Button(self, text=self.labels.start_button, command=self._execute)
+		frame.grid(row=2, column=1, sticky='nw')
+		self.possible_hashes = FileHash.get_algorithms()
+		self._choosen_hash = StringVar(value=self.labels.hash)
+		self._hash_selector = Combobox(frame, values=self._gen_hash_list(), state='readonly', textvariable=self._choosen_hash)
+		self._hash_selector.pack(side='left', anchor='nw', padx=self._pad, pady=self._pad)
+		self._hash_selector.bind('<<ComboboxSelected>>', self._hash_event)
+		Hovertip(self._hash_selector, self.labels.hash_tip)
+		self._choosen_verify = StringVar(value=self.labels.verify)
+		self._verify_selector = Combobox(frame, values=self._gen_verify_list(), state='readonly', textvariable=self._choosen_verify)
+		self._verify_selector.pack(side='right', anchor='ne', padx=self._pad, pady=self._pad)
+		self._verify_selector.bind('<<ComboboxSelected>>', self._verify_event)
+		Hovertip(self._verify_selector, self.labels.verify_tip)
+		self._log_button = Button(self, text=self.labels.log, command=self._select_log)
+		self._log_button.grid(row=3, column=0, sticky='nw', padx=self._pad, pady=self._pad)
+		self._log = StringVar(value=self.config.log_dir)
+		self._log_entry = Entry(self, textvariable=self._log)
+		self._log_entry.grid(row=3, column=1, sticky='nsew', padx=self._pad, pady=self._pad)
+		self._simulate_button = Button(self, text=self.labels.simulate_button, command=self._simulate)
+		self._simulate_button.grid(row=4, column=0, sticky='w', padx=self._pad, pady=self._pad)
+		Hovertip(self._simulate_button, self.labels.simulate_tip)
+		self._exec_button = Button(self, text=self.labels.exec_button, command=self._execute)
 		self._exec_button.grid(row=4, column=1, sticky='e', padx=self._pad, pady=self._pad)
-		Hovertip(self._exec_button, self.labels.start_tip)
+		Hovertip(self._exec_button, self.labels.exec_tip)
 		self._info_text = ScrolledText(self, font=(font_family, font_size), padx=self._pad, pady=self._pad)
 		self._info_text.grid(row=5, column=0, columnspan=2, sticky='nsew',
 			ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
@@ -144,65 +140,91 @@ class Gui(Tk):
 
 	def _get_source_paths(self):
 		'''Read directory paths from text field'''
-		if text := self._source_text.get('1.0', 'end').strip()
-			return [Path(source.strip()) for source in text.split('\n')]
+		if text := self._source_text.get('1.0', 'end').strip():
+			return [Path(source.strip()).absolute() for source in text.split('\n')]
 
-	def _add_dir(self, dir_path):
-		'''Add directory into field'''
-		if not dir_path:
-			return
-		dir_path = dir_path.absolute()
-		old_paths = self._get_source_paths()
-		if old_paths and dir_path in old_paths:
-			return
-		try:
-			self._check.source(dir_path)
-		except Exception as ex:
-			try:
-				msg = self.labels.__dict__[type(ex).__name__.lower()].replace('#', str(ex))
-			except:
-				msg = f'{type(ex).__name__}: {ex}'
-			if isinstance(ex, RuntimeWarning):
-				if askyesno(title=self.labels.warning, message=f'{msg}\n\n{self.labels.ignore}'):
-					self._ignore_warning = True
-				else:
-					return
-			else:
-				showerror(title=self.labels.error, message=msg)
+	def _new_source_path(self, string):
+		'''Return absolute source path if not already in field'''
+		string = string.strip()
+		if string:
+			new_path = Path(string).absolute()
+			old_paths = self._get_source_paths()
+			if old_paths and new_path in old_paths:
 				return
-		self._source_text.insert('end', f'{dir_path}\n')
+			return new_path
 
 	def _select_dir(self):
 		'''Select directory to add into field'''
-		directory = askdirectory(title=self.labels.select_dir, mustexist=True)
-		if directory:
-			self._add_dir(Path(directory))
+		if dir_path := self._new_source_path(askdirectory(title=self.labels.select_dir, mustexist=True)):
+			self._source_text.insert('end', f'{dir_path}\n')
 
 	def _select_files(self):
 		'''Select file(s) to add into field'''
-		directory = askdirectory(title=self.labels.select_dir, mustexist=True)
-		if directory:
-			self._add_dir(Path(directory))
+		filenames = askopenfilenames(title=self.labels.select_files)
+		if filenames:
+			for filename in filenames:
+				if path := self._new_source_path(filename):
+					self._source_text.insert('end', f'{path}\n')
+
+	def _select_destination(self):
+		'''Select destination directory'''
+		if directory := askdirectory(title=self.labels.select_destination, mustexist=False):
+			self._destination.set(directory)
+	
+	def get_destination(self):
+		'''Get destination directory'''
+		return Path(self._destination.get()).absolute()
+
+	def _gen_hash_list(self):
+		'''Generate list of hashes to check'''
+		return [
+			f'\u2611 {hash}' if hash in self.config.hashes else f'\u2610 {hash}'
+			for hash in self.possible_hashes
+		]
+
+	def _gen_verify_list(self):
+		'''Generate list of verification methodes'''
+		return [
+			f'\u2611 {self.labels.size}' if self.config.verify == 'size' else f'\u2610 {self.labels.size}'
+		] + [
+			f'\u2611 {hash}' if self.config.verify == hash else f'\u2610 {hash}'
+			for hash in self.config.hashes
+		]
+
+	def _hash_event(self, dummy_event):
+		'''Hash algorithm selection'''
+		choosen = self._choosen_hash.get()[2:]
+		self._choosen_hash.set(self.labels.hash)
+		if choosen in self.config.hashes:
+			self.config.hashes.remove(choosen)
+			if choosen == self.config.verify:
+				self.config.verify = 'size'
+		else:
+			self.config.hashes.append(choosen)
+			self.config.hashes.sort()
+		self._hash_selector['values'] = self._gen_hash_list()
+		self._verify_selector['values'] = self._gen_verify_list()
+
+	def _verify_event(self, dummy_event):
+		'''Hash algorithm selection'''
+		choosen = self._choosen_verify.get()[2:]
+		self._choosen_verify.set(self.labels.verify)
+		choosen = 'size' if choosen == self.labels.size else choosen
+		if choosen == self.config.verify:
+			self.config.verify = ''
+		else:
+			self.config.verify = choosen
+		self._verify_selector['values'] = self._gen_verify_list()
 
 	def _select_log(self):
 		'''Select directory '''
-		if self.write_log.get():
-			defaultextension = Path(self.config.log_name).suffix.lstrip('.')
-			filename = asksaveasfilename(
-				title = self.labels.logfile,
-				filetypes = (
-					(self.labels.logfile, f'*.{defaultextension}'),
-					(self.labels.allfiles, '*.*')
-				),
-				defaultextension = defaultextension,
-				confirmoverwrite = True
-			)
-			if filename:
-				self.log_path = Path(filename)
-			else:
-				self.write_log.set(False)
-				self.log_path = None
-			print(filename)
+		if directory := askdirectory(title=self.labels.select_log, mustexist=False):
+			self._log.set(directory)
+			self.config.log_dir = directory
+	
+	def get_log_dir(self):
+		'''Get log directory'''
+		return Path(self._log.get()).absolute()
 
 	def echo(self, *args, end=None):
 		'''Write message to info field (ScrolledText)'''
@@ -231,30 +253,27 @@ class Gui(Tk):
 		self._info_text.configure(foreground=self._info_fg, background=self._info_bg)
 		self._warning_state = 'stop'
 
+	def _start_worker(self, job):
+		'''Disable source selection and start worker'''
+		src_paths = self._get_source_paths()
+		if self.source_paths:
+			self._simulate_button.configure(state='disabled')
+			self._exec_button.configure(state='disabled')
+			self._clear_info()
+			self.job = job
+			try:
+				self._work_thread = WorkThread()
+				self._work_thread.start()
+			except:
+				self.finished(True)
+
+	def _simulate(self):
+		'''Run simulation'''
+		self._start_worker('simulate')
+
 	def _execute(self):
 		'''Start copy process / worker'''
-		self.source_paths = self._get_source_paths()
-		if not self.source_paths:
-			return
-		for source_path in self.source_paths:
-			try:
-				self._check.destination(source_path)
-			except Exception as ex:
-				if isinstance(ex, PermissionError):
-					showerror(
-						title = self.labels.error,
-						message = self.labels.permissionerror.replace('#', f'{ex}')
-					)
-				return
-		self._source_button.configure(state='disabled')
-		self._source_text.configure(state='disabled')
-		self._exec_button.configure(state='disabled')
-		self._clear_info()
-		try:
-			self._work_thread = WorkThread(self)
-		except:
-			self.finished(True)
-		self._work_thread.start()
+		self._start_worker('execute')
 
 	def _init_warning(self):
 		'''Init warning functionality'''
@@ -288,6 +307,7 @@ class Gui(Tk):
 		self._source_text.configure(state='normal')
 		self._source_text.delete('1.0', 'end')
 		self._source_button.configure(state='normal')
+		self._destination_entry.set('')
 		self._exec_button.configure(state='normal')
 		self._quit_button.configure(state='normal')
 		self._work_thread = None
@@ -298,11 +318,8 @@ class Gui(Tk):
 			if not askyesno(title=self.labels.warning, message=self.labels.running_warning):
 				return
 			self._work_thread.kill()
-		#self.config.user = self.user.get()
-		#self.config.destination = self.destination.get()
-		#try:
-		#	self.config.save()
-		#except:
-		#	pass
-		
+		try:
+			self.config.save()
+		except:
+			pass
 		self.destroy()

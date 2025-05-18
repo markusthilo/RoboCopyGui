@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Markus Thilo'
-__version__ = '0.0.1_2025-05-13'
+__version__ = '0.0.1_2025-05-17'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
-__description__ = 'Graphic user interface for RoboCopy'
+__description__ = 'Graphical user interface for RoboCopy with hash and verify options'
 
 from sys import executable as __executable__
 from pathlib import Path
@@ -18,7 +18,6 @@ __parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python'
 if __name__ == '__main__':  # start here when run as application
 	Gui(
 		__parent_path__,
-		__parent_path__ / 'appicon.png',
 		__version__,
 		Config(__parent_path__ / 'config.json'),
 		Config(__parent_path__ / 'gui.json'),
