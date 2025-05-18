@@ -7,7 +7,7 @@
     "destination": "Ziel",
     "destination_tip": "Zielverzeichnis für den Kopiervorgnang.",
     "hash": "Hash",
-    "hash_tip": "Wähle Hash-Algorithmen aus.",
+    "hash_tip": "Wähle Hash-Algorithmen aus, wenn Berechnung gewünscht wird.",
     "verify": "Überprüfung",
     "verify_tip": "Wähle Überprüfungsverfahren aus.",
     "size": "Größe",

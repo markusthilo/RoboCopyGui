@@ -12,16 +12,32 @@ from tkinter.messagebox import askyesno, showerror
 from tkinter.filedialog import askdirectory, askopenfilenames, asksaveasfilename
 from idlelib.tooltip import Hovertip
 from lib.hashes import FileHash
-#from lib.worker import Worker
+#from lib.worker import Simulate, Execute
 
-class WorkThread(Thread):
+class SimulateThread(Thread):
+	'''Threat to simulate copy process while Tk is running the GUI'''
+
+	def __init__(self, gui):
+		'''Pass all attributes from GUI to work thread'''
+		print(src_paths)
+		print(dst_paths)
+		finish(None)
+		return
+
+	def run(self):
+		'''Run thread'''
+		for i in range(10):
+			if self._kill_event.is_set():
+				break
+			self._gui.progress(i * 10)
+			self._gui.echo(f'Progress: {i * 10}%')
+			self.sleep(1)
+		self._gui.finished(False)
+
+class ExecThread(SimulateThread):
 	'''Thread that does the work while Tk is running the GUI'''
 
-	def __init__(self, src_paths, dst_path,
-		log_path = None,
-		echo = print,
-		finish = None,
-	):
+	def __init__(self, gui):
 		'''Pass all attributes from GUI to work thread'''
 		print(src_paths)
 		print(dst_paths)
@@ -29,14 +45,12 @@ class WorkThread(Thread):
 		return
 		super().__init__()
 		self._kill_event = Event()
-		self._worker = Worker(gui.app_path, gui.config, gui.labels,
-			done = gui.send_done.get(),
-			finished = gui.send_finished.get(),
-			log = gui.log_path if self._gui.write_log.get() else None,
-			trigger = gui.write_trigger.get(),
-			echo = gui.echo,
-			kill = self._kill_event
-		)		
+		self._worker = Worker(src_paths, dst_path,
+			job = job,
+			log_path = log_path,
+			echo = echo,
+			finish = finish
+		)
 
 	def run(self):
 		'''Run thread'''
@@ -171,9 +185,10 @@ class Gui(Tk):
 		if directory := askdirectory(title=self.labels.select_destination, mustexist=False):
 			self._destination.set(directory)
 	
-	def get_destination(self):
+	def _get_destination_path(self):
 		'''Get destination directory'''
-		return Path(self._destination.get()).absolute()
+		destination = self._destination.get()
+		return Path(destination).absolute() if destination else None
 
 	def _gen_hash_list(self):
 		'''Generate list of hashes to check'''
@@ -256,13 +271,19 @@ class Gui(Tk):
 	def _start_worker(self, job):
 		'''Disable source selection and start worker'''
 		src_paths = self._get_source_paths()
-		if self.source_paths:
+		dst_path = self._get_destination_paths()
+		if src_paths and dst_path:
 			self._simulate_button.configure(state='disabled')
 			self._exec_button.configure(state='disabled')
 			self._clear_info()
 			self.job = job
 			try:
-				self._work_thread = WorkThread()
+				self._work_thread = WorkThread(src_paths, dst_path,
+					log_path = Path(self.config.log_dir) if self.config.log_dir else None,
+					job = job,
+					echo = self.echo,
+					finish = self.finished
+				)
 				self._work_thread.start()
 			except:
 				self.finished(True)
@@ -296,8 +317,15 @@ class Gui(Tk):
 			self._warning_state = 'disabled'
 		self.after(500, self._warning)
 
+	def enable_buttons(self):
+		'''Run this when worker has finished to eanable start buttons'''
+		self._simulate_button.configure(state='normal')
+		self._exec_button.configure(state='normal')
+		self._quit_button.configure(state='normal')
+		self._work_thread = None
+
 	def finished(self, error):
-		'''Run this when worker has finished'''
+		'''Run this when worker has finished copy process'''
 		if error:
 			self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
 			self._warning_state = 'enable'
@@ -308,9 +336,7 @@ class Gui(Tk):
 		self._source_text.delete('1.0', 'end')
 		self._source_button.configure(state='normal')
 		self._destination_entry.set('')
-		self._exec_button.configure(state='normal')
-		self._quit_button.configure(state='normal')
-		self._work_thread = None
+		self.enable_buttons()
 
 	def _quit_app(self):
 		'''Quit app, ask when copy processs is running'''
