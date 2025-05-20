@@ -1,1 +1,1 @@
-{"log_dir": "/home/neo/Public/RoboCopyGui", "log_name": "%y%m%d_%H%M_log.txt", "tsv_name": "%y%m%d_%H%M_files.csv", "hashes": ["md5"], "verify": "size"}
+{"log_dir": "/home/neo/Public", "log_name": "%y%m%d_%H%M_log.txt", "tsv_name": "%y%m%d_%H%M_files.csv", "hashes": ["md5", "sha256"], "verify": "md5"}

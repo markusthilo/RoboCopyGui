@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import logging
 from threading import Thread, Event
 from pathlib import Path
 from tkinter import Tk, PhotoImage, StringVar, BooleanVar
@@ -12,65 +11,37 @@ from tkinter.messagebox import askyesno, showerror
 from tkinter.filedialog import askdirectory, askopenfilenames, asksaveasfilename
 from idlelib.tooltip import Hovertip
 from lib.hashes import FileHash
-#from lib.worker import Simulate, Execute
+from hashedrobocopy import Copy, Simulate
 
-class SimulateThread(Thread):
-	'''Threat to simulate copy process while Tk is running the GUI'''
+class WorkThread(Thread):
+	'''The worker has tu run as thread not to freeze GUI/Tk'''
 
-	def __init__(self, gui):
-		'''Pass all attributes from GUI to work thread'''
-		print(src_paths)
-		print(dst_paths)
-		finish(None)
-		return
-
-	def run(self):
-		'''Run thread'''
-		for i in range(10):
-			if self._kill_event.is_set():
-				break
-			self._gui.progress(i * 10)
-			self._gui.echo(f'Progress: {i * 10}%')
-			self.sleep(1)
-		self._gui.finished(False)
-
-class ExecThread(SimulateThread):
-	'''Thread that does the work while Tk is running the GUI'''
-
-	def __init__(self, gui):
-		'''Pass all attributes from GUI to work thread'''
-		print(src_paths)
-		print(dst_paths)
-		finish(None)
-		return
+	def __init__(self, src_paths, dst_path,
+		job = 'copy',
+		echo = print,
+		log_path = None,
+		finish = None
+	):
+		'''Pass arguments to worker'''
+		self._finish = finish
+		if job == 'copy':
+			self._worker = Copy(src_paths, dst_path, echo=echo, log=log_path)
+		else:
+			self._worker = Simulate(src_paths, dst_path, echo=echo, log=log_path)
 		super().__init__()
 		self._kill_event = Event()
-		self._worker = Worker(src_paths, dst_path,
-			job = job,
-			log_path = log_path,
-			echo = echo,
-			finish = finish
-		)
-
-	def run(self):
-		'''Run thread'''
-		error = False
-		for src_path in self._gui.source_paths:
-			try:
-				self._worker.copy_dir(src_path)
-			except Exception as ex:
-				logging.error(f'{type(ex)}: {ex}')
-				self._gui.echo(f'{type(ex)}: {ex}')
-				error = True
-		try:
-			logging.shutdown()
-		except:
-			pass
-		self._gui.finished(error)
 
 	def kill(self):
 		'''Kill thread'''
 		self._kill_event.set()
+
+	def run(self):
+		'''Run thread'''
+		try:
+			returncode = self._worker.run()
+		except:
+			returncode = 'error'
+		self._finish(returncode)
 
 class Gui(Tk):
 	'''GUI look and feel'''
@@ -130,7 +101,8 @@ class Gui(Tk):
 		self._log = StringVar(value=self.config.log_dir)
 		self._log_entry = Entry(self, textvariable=self._log)
 		self._log_entry.grid(row=3, column=1, sticky='nsew', padx=self._pad, pady=self._pad)
-		self._simulate_button = Button(self, text=self.labels.simulate_button, command=self._simulate)
+		self._simulate_button_text = StringVar(value=self.labels.simulate_button)
+		self._simulate_button = Button(self, textvariable=self._simulate_button_text, command=self._simulate)
 		self._simulate_button.grid(row=4, column=0, sticky='w', padx=self._pad, pady=self._pad)
 		Hovertip(self._simulate_button, self.labels.simulate_tip)
 		self._exec_button = Button(self, text=self.labels.exec_button, command=self._execute)
@@ -253,13 +225,6 @@ class Gui(Tk):
 			self._info_text.yview('end')
 		self._info_newline = end != '\r'
 
-	#			index = 0
-	#		while self.is_alive():
-	#			echo('-\\|/'[index], end='\r')
-	#			sleep(.25)
-	#			index = index + 1 if index < 3 else 0
-	#		self.join()
-
 	def _clear_info(self):
 		'''Clear info text'''
 		self._info_text.configure(state='normal')
@@ -271,9 +236,8 @@ class Gui(Tk):
 	def _start_worker(self, job):
 		'''Disable source selection and start worker'''
 		src_paths = self._get_source_paths()
-		dst_path = self._get_destination_paths()
+		dst_path = self._get_destination_path()
 		if src_paths and dst_path:
-			self._simulate_button.configure(state='disabled')
 			self._exec_button.configure(state='disabled')
 			self._clear_info()
 			self.job = job
@@ -290,10 +254,18 @@ class Gui(Tk):
 
 	def _simulate(self):
 		'''Run simulation'''
-		self._start_worker('simulate')
+		if self._work_thread:
+			self._simulate_button_text.set(self.labels.simulate_button)
+			self._work_thread.kill()
+			self._work_thread = None
+		else:
+			self._simulate_button_text.set(self.labels.stop_button)	
+			self._start_worker('simulate')
 
 	def _execute(self):
 		'''Start copy process / worker'''
+		self._simulate_button.configure(state='disabled')
+		self._exec_button.configure(state='disabled')
 		self._start_worker('execute')
 
 	def _init_warning(self):
@@ -319,23 +291,22 @@ class Gui(Tk):
 
 	def enable_buttons(self):
 		'''Run this when worker has finished to eanable start buttons'''
+		self._simulate_button_text.set(self.labels.simulate_button)
 		self._simulate_button.configure(state='normal')
 		self._exec_button.configure(state='normal')
 		self._quit_button.configure(state='normal')
 		self._work_thread = None
 
-	def finished(self, error):
+	def finished(self, returncode):
 		'''Run this when worker has finished copy process'''
-		if error:
+		if returncode == 'error':
 			self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
 			self._warning_state = 'enable'
 			showerror(title=self.labels.warning, message=self.labels.problems)
-		else:
+		elif returncode == 'green':
 			self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
-		self._source_text.configure(state='normal')
-		self._source_text.delete('1.0', 'end')
-		self._source_button.configure(state='normal')
-		self._destination_entry.set('')
+			self._source_text.delete('1.0', 'end')
+			self._destination_entry.set('')
 		self.enable_buttons()
 
 	def _quit_app(self):
@@ -344,6 +315,7 @@ class Gui(Tk):
 			if not askyesno(title=self.labels.warning, message=self.labels.running_warning):
 				return
 			self._work_thread.kill()
+		self.config.log_dir = self._log_entry.get()
 		try:
 			self.config.save()
 		except:
