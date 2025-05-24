@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import logging
 from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 
 class RoboCopy:
@@ -19,11 +18,14 @@ class RoboCopy:
 				elif line.lower().startswith('/compress'):
 					self._copy_args.append('/compress')
 		except Exception as ex:
-			raise RuntimeError(f'Unable to execute "robocopy /?":\n{ex}')
+			raise ChildProcessError(f'Unable to execute "robocopy /?":\n{ex}')
 
-	def _popen(self, args):
+	def _popen(self, args, simulate=False):
 		'''Use Popen to run RoboCopy'''
-		self._cmd = ['robocopy'] + args
+		self._cmd = ['robocopy']
+		if simulate:
+			self._cmd.append('/l')
+		self._cmd.extend(args)
 		return Popen(self._cmd,
 			stdout = PIPE,
 			stderr = STDOUT,

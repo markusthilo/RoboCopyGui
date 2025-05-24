@@ -3,33 +3,40 @@
 
 from threading import Thread, Event
 from pathlib import Path
+from time import strftime
 from tkinter import Tk, PhotoImage, StringVar, BooleanVar
 from tkinter.font import nametofont
-from tkinter.ttk import Frame, Label, Entry, Button, Combobox
+from tkinter.ttk import Frame, Label, Entry, Button, Style, Combobox
 from tkinter.scrolledtext import ScrolledText
 from tkinter.messagebox import askyesno, showerror
 from tkinter.filedialog import askdirectory, askopenfilenames, asksaveasfilename
 from idlelib.tooltip import Hovertip
 from lib.hashes import FileHash
-from hashedrobocopy import Copy, Simulate
+from lib.worker import Copy
 
 class WorkThread(Thread):
 	'''The worker has tu run as thread not to freeze GUI/Tk'''
 
-	def __init__(self, src_paths, dst_path,
-		job = 'copy',
+	def __init__(self, src_paths, dst_path, app_path, labels,
 		echo = print,
+		simulate = False,
+		hashes = None,
+		verify = 'size',
+		tsv_path = None,
 		log_path = None,
 		finish = None
 	):
 		'''Pass arguments to worker'''
-		self._finish = finish
-		if job == 'copy':
-			self._worker = Copy(src_paths, dst_path, echo=echo, log=log_path)
-		else:
-			self._worker = Simulate(src_paths, dst_path, echo=echo, log=log_path)
 		super().__init__()
+		self._finish = finish
 		self._kill_event = Event()
+		self._worker = Copy(src_paths, dst_path, app_path, labels,
+			simulate = simulate,
+			echo = echo,
+			tsv_path = tsv_path,
+			log_path = log_path,
+			kill = self._kill_event
+		)
 
 	def kill(self):
 		'''Kill thread'''
@@ -37,10 +44,10 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run thread'''
-		try:
-			returncode = self._worker.run()
-		except:
-			returncode = 'error'
+		#try:
+		returncode = self._worker.run()
+		#except:
+		#	returncode = 'error'
 		self._finish(returncode)
 
 class Gui(Tk):
@@ -49,15 +56,16 @@ class Gui(Tk):
 	def __init__(self, app_path, version, config, gui_defs, labels):
 		'''Open application window'''
 		super().__init__()
-		self.config = config
-		self.labels = labels
+		self._app_path = app_path
+		self._config = config
+		self._labels = labels
 		self._defs = gui_defs
 		self._work_thread = None
-		self.title(f'{self.labels.app_title} v{version}')
+		self.title(f'{self._labels.app_title} v{version}')
 		self.rowconfigure(0, weight=1)
 		self.columnconfigure(1, weight=1)
 		self.rowconfigure(5, weight=1)
-		self.iconphoto(True, PhotoImage(file=app_path / self._defs.appicon))
+		self.iconphoto(True, PhotoImage(file=self._app_path / self._defs.appicon))
 		self.protocol('WM_DELETE_WINDOW', self._quit_app)
 		font = nametofont('TkTextFont').actual()
 		font_family = font['family']
@@ -70,15 +78,15 @@ class Gui(Tk):
 		self._pad = int(font_size * self._defs.pad_factor)
 		frame = Frame(self)
 		frame.grid(row=0, column=0, sticky='nw')
-		self._source_dir_button = Button(frame, text=self.labels.directory, command=self._select_dir)
+		self._source_dir_button = Button(frame, text=self._labels.directory, command=self._select_dir)
 		self._source_dir_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
-		Hovertip(self._source_dir_button, self.labels.source_dir_tip)
-		self._source_file_button = Button(frame, text=self.labels.file_s, command=self._select_files)
+		Hovertip(self._source_dir_button, self._labels.source_dir_tip)
+		self._source_file_button = Button(frame, text=self._labels.file_s, command=self._select_files)
 		self._source_file_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
-		Hovertip(self._source_file_button, self.labels.source_file_tip)
+		Hovertip(self._source_file_button, self._labels.source_file_tip)
 		self._source_text = ScrolledText(self, font=(font_family, font_size))
 		self._source_text.grid(row=0, column=1, sticky='nsew', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
-		self._destination_button = Button(self, text=self.labels.destination, command=self._select_destination)
+		self._destination_button = Button(self, text=self._labels.destination, command=self._select_destination)
 		self._destination_button.grid(row=1, column=0, sticky='nw', padx=self._pad, pady=self._pad)
 		self._destination = StringVar()
 		self._destination_entry = Entry(self, textvariable=self._destination)
@@ -86,28 +94,28 @@ class Gui(Tk):
 		frame = Frame(self)
 		frame.grid(row=2, column=1, sticky='nw')
 		self.possible_hashes = FileHash.get_algorithms()
-		self._choosen_hash = StringVar(value=self.labels.hash)
+		self._choosen_hash = StringVar(value=self._labels.hash)
 		self._hash_selector = Combobox(frame, values=self._gen_hash_list(), state='readonly', textvariable=self._choosen_hash)
 		self._hash_selector.pack(side='left', anchor='nw', padx=self._pad, pady=self._pad)
 		self._hash_selector.bind('<<ComboboxSelected>>', self._hash_event)
-		Hovertip(self._hash_selector, self.labels.hash_tip)
-		self._choosen_verify = StringVar(value=self.labels.verify)
+		Hovertip(self._hash_selector, self._labels.hash_tip)
+		self._choosen_verify = StringVar(value=self._labels.verify)
 		self._verify_selector = Combobox(frame, values=self._gen_verify_list(), state='readonly', textvariable=self._choosen_verify)
 		self._verify_selector.pack(side='right', anchor='ne', padx=self._pad, pady=self._pad)
 		self._verify_selector.bind('<<ComboboxSelected>>', self._verify_event)
-		Hovertip(self._verify_selector, self.labels.verify_tip)
-		self._log_button = Button(self, text=self.labels.log, command=self._select_log)
+		Hovertip(self._verify_selector, self._labels.verify_tip)
+		self._log_button = Button(self, text=self._labels.log, command=self._select_log)
 		self._log_button.grid(row=3, column=0, sticky='nw', padx=self._pad, pady=self._pad)
-		self._log = StringVar(value=self.config.log_dir)
+		self._log = StringVar(value=self._config.log_dir)
 		self._log_entry = Entry(self, textvariable=self._log)
 		self._log_entry.grid(row=3, column=1, sticky='nsew', padx=self._pad, pady=self._pad)
-		self._simulate_button_text = StringVar(value=self.labels.simulate_button)
+		self._simulate_button_text = StringVar(value=self._labels.simulate_button)
 		self._simulate_button = Button(self, textvariable=self._simulate_button_text, command=self._simulate)
 		self._simulate_button.grid(row=4, column=0, sticky='w', padx=self._pad, pady=self._pad)
-		Hovertip(self._simulate_button, self.labels.simulate_tip)
-		self._exec_button = Button(self, text=self.labels.exec_button, command=self._execute)
+		Hovertip(self._simulate_button, self._labels.simulate_tip)
+		self._exec_button = Button(self, text=self._labels.exec_button, command=self._execute)
 		self._exec_button.grid(row=4, column=1, sticky='e', padx=self._pad, pady=self._pad)
-		Hovertip(self._exec_button, self.labels.exec_tip)
+		Hovertip(self._exec_button, self._labels.exec_tip)
 		self._info_text = ScrolledText(self, font=(font_family, font_size), padx=self._pad, pady=self._pad)
 		self._info_text.grid(row=5, column=0, columnspan=2, sticky='nsew',
 			ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
@@ -120,7 +128,7 @@ class Gui(Tk):
 		self._info_label.grid(row=6, column=0, sticky='w', padx=self._pad, pady=self._pad)
 		self._label_fg = self._info_label.cget('foreground')
 		self._label_bg = self._info_label.cget('background')
-		self._quit_button = Button(self, text=self.labels.quit, command=self._quit_app)
+		self._quit_button = Button(self, text=self._labels.quit, command=self._quit_app)
 		self._quit_button.grid(row=6, column=1, sticky='e', padx=self._pad, pady=self._pad)
 		self._init_warning()
 
@@ -141,12 +149,12 @@ class Gui(Tk):
 
 	def _select_dir(self):
 		'''Select directory to add into field'''
-		if dir_path := self._new_source_path(askdirectory(title=self.labels.select_dir, mustexist=True)):
+		if dir_path := self._new_source_path(askdirectory(title=self._labels.select_dir, mustexist=True)):
 			self._source_text.insert('end', f'{dir_path}\n')
 
 	def _select_files(self):
 		'''Select file(s) to add into field'''
-		filenames = askopenfilenames(title=self.labels.select_files)
+		filenames = askopenfilenames(title=self._labels.select_files)
 		if filenames:
 			for filename in filenames:
 				if path := self._new_source_path(filename):
@@ -154,7 +162,7 @@ class Gui(Tk):
 
 	def _select_destination(self):
 		'''Select destination directory'''
-		if directory := askdirectory(title=self.labels.select_destination, mustexist=False):
+		if directory := askdirectory(title=self._labels.select_destination, mustexist=False):
 			self._destination.set(directory)
 	
 	def _get_destination_path(self):
@@ -165,49 +173,49 @@ class Gui(Tk):
 	def _gen_hash_list(self):
 		'''Generate list of hashes to check'''
 		return [
-			f'\u2611 {hash}' if hash in self.config.hashes else f'\u2610 {hash}'
+			f'\u2611 {hash}' if hash in self._config.hashes else f'\u2610 {hash}'
 			for hash in self.possible_hashes
 		]
 
 	def _gen_verify_list(self):
 		'''Generate list of verification methodes'''
 		return [
-			f'\u2611 {self.labels.size}' if self.config.verify == 'size' else f'\u2610 {self.labels.size}'
+			f'\u2611 {self._labels.size}' if self._config.verify == 'size' else f'\u2610 {self._labels.size}'
 		] + [
-			f'\u2611 {hash}' if self.config.verify == hash else f'\u2610 {hash}'
-			for hash in self.config.hashes
+			f'\u2611 {hash}' if self._config.verify == hash else f'\u2610 {hash}'
+			for hash in self._config.hashes
 		]
 
 	def _hash_event(self, dummy_event):
 		'''Hash algorithm selection'''
 		choosen = self._choosen_hash.get()[2:]
-		self._choosen_hash.set(self.labels.hash)
-		if choosen in self.config.hashes:
-			self.config.hashes.remove(choosen)
-			if choosen == self.config.verify:
-				self.config.verify = 'size'
+		self._choosen_hash.set(self._labels.hash)
+		if choosen in self._config.hashes:
+			self._config.hashes.remove(choosen)
+			if choosen == self._config.verify:
+				self._config.verify = 'size'
 		else:
-			self.config.hashes.append(choosen)
-			self.config.hashes.sort()
+			self._config.hashes.append(choosen)
+			self._config.hashes.sort()
 		self._hash_selector['values'] = self._gen_hash_list()
 		self._verify_selector['values'] = self._gen_verify_list()
 
 	def _verify_event(self, dummy_event):
 		'''Hash algorithm selection'''
 		choosen = self._choosen_verify.get()[2:]
-		self._choosen_verify.set(self.labels.verify)
-		choosen = 'size' if choosen == self.labels.size else choosen
-		if choosen == self.config.verify:
-			self.config.verify = ''
+		self._choosen_verify.set(self._labels.verify)
+		choosen = 'size' if choosen == self._labels.size else choosen
+		if choosen == self._config.verify:
+			self._config.verify = ''
 		else:
-			self.config.verify = choosen
+			self._config.verify = choosen
 		self._verify_selector['values'] = self._gen_verify_list()
 
 	def _select_log(self):
 		'''Select directory '''
-		if directory := askdirectory(title=self.labels.select_log, mustexist=False):
+		if directory := askdirectory(title=self._labels.select_log, mustexist=False):
 			self._log.set(directory)
-			self.config.log_dir = directory
+			self._config.log_dir = directory
 	
 	def get_log_dir(self):
 		'''Get log directory'''
@@ -233,40 +241,62 @@ class Gui(Tk):
 		self._info_text.configure(foreground=self._info_fg, background=self._info_bg)
 		self._warning_state = 'stop'
 
-	def _start_worker(self, job):
+	def _start_worker(self, src_paths, dst_path, tsv_path, log_path, simulate):
 		'''Disable source selection and start worker'''
-		src_paths = self._get_source_paths()
-		dst_path = self._get_destination_path()
-		if src_paths and dst_path:
-			self._exec_button.configure(state='disabled')
-			self._clear_info()
-			self.job = job
-			try:
-				self._work_thread = WorkThread(src_paths, dst_path,
-					log_path = Path(self.config.log_dir) if self.config.log_dir else None,
-					job = job,
-					echo = self.echo,
-					finish = self.finished
-				)
-				self._work_thread.start()
-			except:
-				self.finished(True)
+		self._exec_button.configure(state='disabled')
+		self._clear_info()
+		self._work_thread = WorkThread(
+			src_paths,
+			dst_path,
+			self._app_path,
+			self._labels,
+			tsv_path = tsv_path,
+			log_path = log_path,
+			hashes = self._config.hashes,
+			verify = self._config.verify,
+			simulate = simulate,
+			echo = self.echo,
+			finish = self.finished
+		)
+		self._work_thread.start()
 
 	def _simulate(self):
 		'''Run simulation'''
-		if self._work_thread:
-			self._simulate_button_text.set(self.labels.simulate_button)
-			self._work_thread.kill()
-			self._work_thread = None
-		else:
-			self._simulate_button_text.set(self.labels.stop_button)	
-			self._start_worker('simulate')
+		src_paths = self._get_source_paths()
+		dst_path = self._get_destination_path()
+		if src_paths and dst_path:
+			if self._work_thread:
+				self._simulate_button_text.set(self._labels.simulate_button)
+				self._work_thread.kill()
+				self._work_thread = None
+			else:
+				self._simulate_button_text.set(self._labels.stop_button)
+				self._start_worker(src_paths, dst_path, None, None, True)
 
 	def _execute(self):
 		'''Start copy process / worker'''
-		self._simulate_button.configure(state='disabled')
-		self._exec_button.configure(state='disabled')
-		self._start_worker('execute')
+		src_paths = self._get_source_paths()
+		dst_path = self._get_destination_path()
+		if src_paths and dst_path:
+			if log_dir := self._log_entry.get():
+				self._config.log_dir = log_dir
+				log_dir_path = Path(log_dir)
+			elif self._config.hashes:
+				self._select_log()
+				if not self._config.log_dir:
+					showerror(title=self._labels.warning, message=self._labels.log_required)
+					return
+				log_dir_path = Path(log_dir)
+			self._config.log_dir = log_dir
+			self._simulate_button.configure(state='disabled')
+			self._exec_button.configure(state='disabled')
+			self._start_worker(
+				src_paths,
+				dst_path,
+				log_dir_path / strftime(self._config.tsv_name) if log_dir else None,
+				log_dir_path / strftime(self._config.log_name) if log_dir else None,
+				False
+			)
 
 	def _init_warning(self):
 		'''Init warning functionality'''
@@ -276,7 +306,7 @@ class Gui(Tk):
 	def _warning(self):
 		'''Show flashing warning'''
 		if self._warning_state == 'enable':
-			self._info_label.configure(text=self.labels.warning)
+			self._info_label.configure(text=self._labels.warning)
 			self._warning_state = '1'
 		if self._warning_state == '1':
 			self._info_label.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
@@ -291,7 +321,7 @@ class Gui(Tk):
 
 	def enable_buttons(self):
 		'''Run this when worker has finished to eanable start buttons'''
-		self._simulate_button_text.set(self.labels.simulate_button)
+		self._simulate_button_text.set(self._labels.simulate_button)
 		self._simulate_button.configure(state='normal')
 		self._exec_button.configure(state='normal')
 		self._quit_button.configure(state='normal')
@@ -302,7 +332,7 @@ class Gui(Tk):
 		if returncode == 'error':
 			self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
 			self._warning_state = 'enable'
-			showerror(title=self.labels.warning, message=self.labels.problems)
+			showerror(title=self._labels.warning, message=self._labels.problems)
 		elif returncode == 'green':
 			self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
 			self._source_text.delete('1.0', 'end')
@@ -312,12 +342,12 @@ class Gui(Tk):
 	def _quit_app(self):
 		'''Quit app, ask when copy processs is running'''
 		if self._work_thread:
-			if not askyesno(title=self.labels.warning, message=self.labels.running_warning):
+			if not askyesno(title=self._labels.warning, message=self._labels.running_warning):
 				return
 			self._work_thread.kill()
-		self.config.log_dir = self._log_entry.get()
+		self._config.log_dir = self._log_entry.get()
 		try:
-			self.config.save()
+			self._config.save()
 		except:
 			pass
 		self.destroy()
