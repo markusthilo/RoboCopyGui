@@ -24,12 +24,15 @@ class FileHash:
 class HashThread(Thread):
 	'''Calculate hashes of files in thread'''
 
-	def __init__(self, paths, algorithms=['md5']):
+	def __init__(self, files, algorithms=['md5']):
 		'''Generate object to calculate hashes of files using multiprocessing pool'''
 		super().__init__()
-		self._paths = paths
+		self._files = files
 		self._algorithms = algorithms
 
 	def run(self):
 		'''Calculate all hashes (multiple algorithms) in parallel - this method launches the worker'''
-		self.hashes = [[FileHash.hashsum(path, algorithm=alg) for alg in self._algorithms] for path in self._paths]
+		self.files = [
+			{'path': path, 'size': size} | {alg: FileHash.hashsum(path, algorithm=alg) for alg in self._algorithms}
+			for path, size in self._files
+		]

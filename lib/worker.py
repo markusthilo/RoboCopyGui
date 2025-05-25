@@ -5,132 +5,138 @@ import logging
 from pathlib import Path
 from time import strftime, sleep, perf_counter
 from datetime import timedelta
-#from lib.robocopy import RoboCopy
-from lib.hash import HashThread
+from lib.robocopy import RoboCopy
+from lib.hashes import HashThread
 from lib.size import Size
 
 class Copy:
 	'''Copy files using RoboCopy'''
 
 	def __init__(self, src_paths, dst_path, app_path, labels,
-		echo=print, tsv_path=None, log_path=None, hashes=None, verify=None, simulate=False, kill=None
+		tsv_path=None, log_path=None, hashes=None, verify=None, simulate=False, echo=print, kill=None
 	):
 		'''Create object'''
-		self._src_paths = src_paths
-		self._dst_paths = dst_path
-		self._app_path = app_path
-		self._labels = labels
-		self._echo = echo
-		self._tsv_path = tsv_path
-		self._log_path = log_path
-		self._hashes = hashes
-		self._verify = verify
-		self._simulate = simulate
-		self._kill = kill if kill else lambda: False
+		self._src_paths = src_paths					# given source paths
+		self._dst_path = dst_path.resolve()			# given destination path
+		self._app_path = app_path					# root directory of robocopygui.py or robocopygui.exe
+		self._labels = labels						# phrases for logging etc. ("language package")
+		self._tsv_path = tsv_path					# path to write file list (None will prevent writing one)
+		self._log_path = log_path					# path to additional log (given by user, None will only write lastlog in app folder)
+		self._hashes = None if simulate else hashes	# list of hash algorithms to be calculated
+		self._verify = None if simulate else verify	# algorithm or method to compare files in source and destination
+		self._simulate = simulate					# True to run robocopy with /l = only list files, do not copy
+		self._echo = echo							# method to show messages (print or from gui)
+		self._kill = kill							# event to stop copy process
 
 	def run(self):
 		'''Execute copy process (or simulation)'''
-
-		### DEBUG ###
-		self._echo('self._src_paths', self._src_paths)
-		for e in self.__dict__.items():
-			print(e)
-		#############
-
 		try:
 			logger = logging.getLogger()
 			logger.setLevel(logging.DEBUG)
 			formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-			lastlog_fh = logging.FileHandler(filename=self._app_path/'lastlog', mode='w')
+			lastlog_fh = logging.FileHandler(filename=self._app_path/'lastlog.txt', mode='w')
 			lastlog_fh.setFormatter(formatter)
 			logger.addHandler(lastlog_fh)
-			if self._log_path:
+			if self._log_path:	# additional log file
 				self._log_path.parent.mkdir(parents=True, exist_ok=True)
 				userlog_fh = logging.FileHandler(filename=self._log_path, mode='w')
 				userlog_fh.setFormatter(formatter)
 				logger.addHandler(userlog_fh)
-
-			#self._robocopy = RoboCopy()	##### DEBUG #####
-
+			self._robocopy = RoboCopy()
 		except Exception as ex:
-			self._exception(ex)
+			self._error(ex)
 			try:
 				logging.shutdown()
 			except:
 				pass
 			raise ex
 		start_time = perf_counter()
-		self._src_dir_paths = set()
-		self._src_file_paths = set()
+		src_dir_paths = set()	# given directories to copy
+		src_file_paths = set()	# given files to copy
+		self._info(self._labels.reading_source)
 		for path in self._src_paths:
 			if path.is_dir():
-				self._src_dir_paths.add(path.resolve())
+				src_dir_paths.add(path.resolve())
 			elif path.is_file():
-				self._src_file_paths.add(path.resolve())
+				src_file_paths.add(path.resolve())
 			else:
 				msg = self._labels.invalid_path.replace('#', '{path}')
 				logging.error(msg)
 				self._echo(msg)
 				raise FileNotFoundError(msg)
-
-		### DEBUG ###
-		for path in self._src_dir_paths:
-			print(path)
-		for path in self._src_file_paths:
-			print(path)
-		#############
-		
-	
-		logging.info(f'{self._mail_address} -> {self._config.destination}')
-		self._info(f'{self._labels.reading_structure} {src_path}')
-		src_file_paths = list()
-		src_file_sizes = list()
-		total_bytes = 0
-		for path in src_path.rglob('*'):	# analyze root structure
-			if path.is_file():
-				size = path.stat().st_size
-				src_file_paths.append(path)
-				src_file_sizes.append(size)
-				total_bytes += size
-		hash_thread = HashThread(src_file_paths)
-		self._info(self._labels.starting_hashing.replace('#', f'{len(src_file_paths)}'))
-		hash_thread.start()
-		dst_path = Path(self._config.target, src_path.name)
-		self._info(f'{self._labels.starting_robocopy}: {src_path} -> {dst_path}, {Size(total_bytes).readable()}')
-		for line in self._robocopy.copy_dir(src_path, dst_path):
-			if line.endswith('%'):
-				self._echo(line, end='\r')
-			else:
-				self._echo(line)
-			if self._kill_switch and self._kill_switch.is_set():
-				self._robocopy.terminate()
-				raise SystemExit(self._labels.worker_killed)
-		if self._robocopy.returncode > 5:
-			raise ChildProcessError(self._labels.robocopy_problem.replace('#', f'{self._robocopy.returncode}'))
+		src_dir_paths = list(src_dir_paths)
+		src_file_paths = list(src_file_paths)
+		src_files = list()	# all files to copy (including subdirectories): (path, size)
+		total_bytes = Size(0)	# total size of all files to copy
+		for this_src_dir_path in src_dir_paths:
+			for path in this_src_dir_path.rglob('*'):
+				if path.is_file():
+					size = path.stat().st_size
+					src_files.append((path, size))
+					total_bytes += size
+		for path in src_file_paths:
+			size = path.stat().st_size
+			src_files.append((path, size))
+			total_bytes += size
+		self._info(f'{self._labels.done_reading}: {len(src_files)} {self._labels.file_s}, {total_bytes.readable()}')
+		if self._hashes:
+			self._info(self._labels.starting_hashing)
+			hash_thread = HashThread(src_files, algorithms=self._hashes)
+			hash_thread.start()
+		for src_path in src_dir_paths:
+			dst_path = self._dst_path / src_path.name
+			#if not self._simulate:
+			#	dst_path.mkdir(exist_ok=True)
+			self._info(self._labels.executing.replace('#',
+				f'{self._robocopy.mk_cmd(src_path, dst_path, simulate=self._simulate)}')
+			)
+			#self._robocopy.popen()
+			#self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
+		for src_path in src_file_paths:
+			self._info(self._labels.executing.replace('#',
+				f'{self._robocopy.mk_cmd(src_path.parent, self._dst_path, file=src_path.name, simulate=self._simulate)}')
+			)
+			#self._robocopy.popen()
+			#self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
 		self._info(self._labels.robocopy_finished)
-		mismatches = 0
-		total = len(src_file_paths)
-		for cnt, (src_file_path, src_size) in enumerate(zip(src_file_paths, src_file_sizes), start=1):
-			self._echo(f'{int(100*cnt/total)}%', end='\r')
-			dst_file_path = dst_path.joinpath(src_file_path.relative_to(src_path))
-			dst_size = dst_file_path.stat().st_size
-			if dst_size != src_size:
-				msg = self._labels.mismatching_sizes.replace('#', f'{src_file_path} => {src_size}, {dst_file_path} => {dst_size}')
-				logging.warning(msg)
-				self._echo(msg)
-				mismatches += 1
-		self._info(self._labels.size_check_finished)
-		if hash_thread.is_alive():
+		if self._verify == 'size':
+			self._info(self._labels.starting_size_verification)
+			mismatches = 0
+			total = len(src_file_paths)
+			for cnt, (src_file_path, src_size) in enumerate(src_files, start=1):
+				self._echo(f'{int(100*cnt/total)}%', end='\r')
+				dst_file_path = dst_path.joinpath(src_file_path.relative_to(src_path))
+				dst_size = dst_file_path.stat().st_size
+				if dst_size != src_size:
+					self._warning(self._labels.mismatching_sizes.replace('#',
+						f'{src_file_path} => {src_size}, {dst_file_path} => {dst_size}')
+					)
+					mismatches += 1
+			self._info(self._labels.size_check_finished)
+		if self._hashes and hash_thread.is_alive():
 			self._info(self._labels.hashing_in_progress)
 			index = 0
 			while hash_thread.is_alive():
-				echo(f'{"|/-\\"[index]}  ', end='\r')
+				self._echo(f'{"|/-\\"[index]}  ', end='\r')
 				index += 1
 				if index > 3:
 					index = 0
 				sleep(.25)
-		hash_thread.join()
-		self._info(self._labels.hashing_finished)
+			hash_thread.join()
+			self._info(self._labels.hashing_finished)
+			print(hash_thread.files)
+
+		return ### DEBUG ###
+
+		head = 'Source\tType/File Size'
+		if self.hash_algs:
+			self.hashes = hash_thread.wait(echo=self.echo)
+			head += f'\t{"\t".join(self.hash_algs)}'
+			cols2add = '\t-' * len(self.hash_algs)
+		else:
+			cols2add = ''
+
+
 		tsv = self._config.tsv_head
 		for path, md5 in hash_thread.get_hashes():
 			tsv += f'\n{path.relative_to(src_path.parent)}\t{md5}'
@@ -168,12 +174,27 @@ class Copy:
 		logging.info(msg)
 		self._echo(msg)
 
-	def _exception(self, ex):
+	def _decode_exception(self, arg):
+		'''Decode exception'''
+		return f'{type(arg)}: {arg}' if isinstance(arg, Exception) else str(arg)
+
+	def _warning(self, arg):
+		'''Log and echo warning'''
+		msg = self._decode_exception(arg)
+		logging.warning(msg)
+		self._echo(msg)
+
+	def _error(self, arg):
 		'''Log and echo error'''
-		msg = f'{type(ex)}: {ex}'
+		msg = self._decode_exception(arg)
 		logging.error(msg)
 		self._echo(msg)
 
+	def _chck_returncode(self, returncode):
+		if returncode > 5:
+			ex = ChildProcessError(self._labels.robocopy_problem.replace('#', f'{returncode}'))
+			self._error(ex)
+			raise ex
 
 class OldHashedRoboCopy:
 	'''Tool to copy files using RoboCopy and build hashes'''

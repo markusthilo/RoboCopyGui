@@ -17,24 +17,30 @@ from lib.worker import Copy
 class WorkThread(Thread):
 	'''The worker has tu run as thread not to freeze GUI/Tk'''
 
-	def __init__(self, src_paths, dst_path, app_path, labels,
-		echo = print,
-		simulate = False,
-		hashes = None,
-		verify = 'size',
-		tsv_path = None,
-		log_path = None,
-		finish = None
+	def __init__(self,
+		src_paths,
+		dst_path,
+		app_path,
+		labels,
+		tsv_path,
+		log_path,
+		hashes,
+		verify,
+		simulate,
+		echo,
+		finish
 	):
 		'''Pass arguments to worker'''
 		super().__init__()
 		self._finish = finish
 		self._kill_event = Event()
 		self._worker = Copy(src_paths, dst_path, app_path, labels,
-			simulate = simulate,
-			echo = echo,
 			tsv_path = tsv_path,
 			log_path = log_path,
+			hashes = hashes,
+			verify = verify,
+			simulate = simulate,
+			echo = echo,
 			kill = self._kill_event
 		)
 
@@ -189,7 +195,7 @@ class Gui(Tk):
 	def _hash_event(self, dummy_event):
 		'''Hash algorithm selection'''
 		choosen = self._choosen_hash.get()[2:]
-		self._choosen_hash.set(self._labels.hash)
+		self._choosen_hash.set(self._labels.hash)	# reset shown text
 		if choosen in self._config.hashes:
 			self._config.hashes.remove(choosen)
 			if choosen == self._config.verify:
@@ -203,7 +209,7 @@ class Gui(Tk):
 	def _verify_event(self, dummy_event):
 		'''Hash algorithm selection'''
 		choosen = self._choosen_verify.get()[2:]
-		self._choosen_verify.set(self._labels.verify)
+		self._choosen_verify.set(self._labels.verify)	# reset shown text
 		choosen = 'size' if choosen == self._labels.size else choosen
 		if choosen == self._config.verify:
 			self._config.verify = ''
@@ -250,13 +256,13 @@ class Gui(Tk):
 			dst_path,
 			self._app_path,
 			self._labels,
-			tsv_path = tsv_path,
-			log_path = log_path,
-			hashes = self._config.hashes,
-			verify = self._config.verify,
-			simulate = simulate,
-			echo = self.echo,
-			finish = self.finished
+			tsv_path,
+			log_path,
+			self._config.hashes,
+			self._config.verify,
+			simulate,
+			self.echo,
+			self.finished
 		)
 		self._work_thread.start()
 

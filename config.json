@@ -1,1 +1,1 @@
-{"log_dir": "/home/neo/Public/test_logs", "log_name": "%y%m%d_%H%M%S_log.txt", "tsv_name": "%y%m%d_%H%M%S_files.csv", "hashes": ["md5", "sha256"], "verify": "md5"}
+{"log_dir": "/home/neo/Public/test_logs", "log_name": "%y%m%d_%H%M%S_robolog.txt", "tsv_name": "%y%m%d_%H%M%S_robofiles.csv", "hashes": ["md5", "sha1"], "verify": ""}

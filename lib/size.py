@@ -34,3 +34,7 @@ class Size(int):
 		if not '{b}' in format_k and rnd_iec == 0 and rnd_si == 0:
 			return format_b.format(b=size)
 		return format_k.format(iec=iec, si=si, b=size)
+
+	def __add__(self, other):
+		'''Plus'''
+		return Size(int.__add__(self, other))

@@ -1,64 +1,76 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
+#from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
+from pathlib import Path
 
 class RoboCopy:
 	'''Wrapper for RoboCopy'''
 
+	CMD = 'robocopy'
+
 	def __init__(self):
-		'''Create robocopy process'''
+		'''Prepare RoboCopy arguments'''
+		self._args = ['/fp', '/ns', '/njh', '/njs', '/nc']
+		self._cmd = [self.CMD, '/?']
+
+		return ##### DEBUG #####
+
 		self._startupinfo = STARTUPINFO()
 		self._startupinfo.dwFlags |= STARTF_USESHOWWINDOW
-		self._copy_args = ['/e', '/fp', '/ns', '/njh', '/njs', '/nc']
 		try:
-			for line in self._yield(['/?']):
+			for line in self.run():
 				if line.lstrip().lower().startswith('/unicode'):
-					self._copy_args.append('/unicode')
+					self._args.append('/unicode')
 				elif line.lower().startswith('/compress'):
-					self._copy_args.append('/compress')
+					self._args.append('/compress')
 		except Exception as ex:
 			raise ChildProcessError(f'Unable to execute "robocopy /?":\n{ex}')
 
-	def _popen(self, args, simulate=False):
-		'''Use Popen to run RoboCopy'''
-		self._cmd = ['robocopy']
+	def __repr__(self):
+		'''Return command line as string'''
+		return ' '.join(f"'{item}'" if isinstance(item, Path) else f'{item}' for item in self._cmd)
+
+	def mk_cmd(self, src, dst, file=None, simulate=False):
+		'''Create command line for RoboCopy'''
+		self._cmd = [self.CMD, src, dst]
+		if file:
+			self._cmd.append(Path(file))
+		else:
+			self._cmd.append('/e')
+		self._cmd.extend(self._args)
 		if simulate:
 			self._cmd.append('/l')
-		self._cmd.extend(args)
-		return Popen(self._cmd,
-			stdout = PIPE,
-			stderr = STDOUT,
+		return self.__repr__()
+
+	def popen(self):
+		'''Launch RoboCopy process'''
+		self.process = Popen(self._cmd,
+			#stdout = PIPE,
+			#stderr = STDOUT,
 			encoding = 'utf-8',
 			errors = 'ignore',
 			universal_newlines = True,
 			startupinfo = self._startupinfo
 		)
+		return self.process
 
-	def _yield(self, args):
-		'''Execute RoboCopy and yield output'''
-		proc = self._popen(args)
-		for line in proc.stdout:
+	def run(self, kill=None):
+		'''Run RoboCopy and yield stdout'''
+		for line in self.popen().stdout:
+			if kill and kill.is_set():
+				self.process.terminate()
+				raise SystemExit('Kill signal')
 			if stripped := line.strip():
 				yield stripped
 		self.returncode = proc.wait()
 
-	def _run(self, args):
-		'''Run RoboCopy and return process when finished'''
-		proc = self._popen(args)
-		self.returncode = proc.wait()
-		return proc
+	def wait(self, kill=None, echo=print):
+		'''Run RoboCopy and yield progress '''
+		for line in self._robocopy.run(kill=kill):
+			if line.endswith('%'):
+				echo(line, end='\r')
+			else:
+				echo(line)
+		return self.returncode
 
-	def copy_dir(self, src, dst):
-		'''Copy recursivly a directory'''
-		return self._yield([src, dst] + self._copy_args)
-
-	def copy_file(self, src, dst):
-		'''Copy one file into destination directory'''
-		proc = self._run([src.parent, dst, src.name])
-		self.returncode = proc.wait()
-		return proc
-
-	def __repr__(self):
-		'''Return command line as string'''
-		return ' '.join(f'{item}' for item in self._cmd)
