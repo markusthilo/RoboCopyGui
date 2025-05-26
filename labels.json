@@ -35,10 +35,12 @@
     "robocopy_problem": "RoboCopy hatte ein Problem, Rückgabewert: #",
     "robocopy_finished": "RoboCopy wurde beendet",
     "starting_size_verification": "Starte Überprüfung anhand Dateigröße",
+    "of_files": "von # Dateien",
     "mismatching_sizes": "Dateigrößenabweichung: #",
     "size_check_finished": "Überprüfung anhand Dateigröße ist abgeschlossen",
     "hashing_in_progress": "Führe die Hash-Wert-Berechnung fort",
     "hashing_finished": "Hash-Wert-Berechnung ist abgeschlossen",
+    "starting_hash_verification": "Starte Überprüfung anhand Hash-Wert",
 
 
 

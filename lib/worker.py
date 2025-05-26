@@ -55,10 +55,11 @@ class Copy:
 		src_file_paths = set()	# given files to copy
 		self._info(self._labels.reading_source)
 		for path in self._src_paths:
-			if path.is_dir():
-				src_dir_paths.add(path.resolve())
-			elif path.is_file():
-				src_file_paths.add(path.resolve())
+			src_path = path.resolve()
+			if src_path.is_dir():
+				src_dir_paths.add(src_path)
+			elif src_path.is_file():
+				src_file_paths.add(src_path)
 			else:
 				msg = self._labels.invalid_path.replace('#', '{path}')
 				logging.error(msg)
@@ -66,22 +67,22 @@ class Copy:
 				raise FileNotFoundError(msg)
 		src_dir_paths = list(src_dir_paths)
 		src_file_paths = list(src_file_paths)
-		src_files = list()	# all files to copy (including subdirectories): (path, size)
+		files = list()	# all files to copy (including subdirectories): (path, size)
 		total_bytes = Size(0)	# total size of all files to copy
 		for this_src_dir_path in src_dir_paths:
 			for path in this_src_dir_path.rglob('*'):
-				if path.is_file():
+				if src_path.is_file():
 					size = path.stat().st_size
-					src_files.append((path, size))
+					files.append((path, self._dst_path / path.relative_to(this_src_dir_path), size))
 					total_bytes += size
 		for path in src_file_paths:
 			size = path.stat().st_size
-			src_files.append((path, size))
+			files.append((path, self._dst_path / path.name, size))
 			total_bytes += size
 		self._info(f'{self._labels.done_reading}: {len(src_files)} {self._labels.file_s}, {total_bytes.readable()}')
 		if self._hashes:
 			self._info(self._labels.starting_hashing)
-			hash_thread = HashThread(src_files, algorithms=self._hashes)
+			hash_thread = HashThread(files, algorithms=self._hashes)
 			hash_thread.start()
 		for src_path in src_dir_paths:
 			dst_path = self._dst_path / src_path.name
@@ -99,19 +100,20 @@ class Copy:
 			#self._robocopy.popen()
 			#self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
 		self._info(self._labels.robocopy_finished)
+		total_files = len(files)
+		mismatches = 0
+		bad_dst_file_paths = set()
 		if self._verify == 'size':
 			self._info(self._labels.starting_size_verification)
-			mismatches = 0
-			total = len(src_file_paths)
-			for cnt, (src_file_path, src_size) in enumerate(src_files, start=1):
-				self._echo(f'{int(100*cnt/total)}%', end='\r')
-				dst_file_path = dst_path.joinpath(src_file_path.relative_to(src_path))
-				dst_size = dst_file_path.stat().st_size
+			for cnt, (src_path, dst_path, src_size) in enumerate(files, start=1):
+				self._echo_file_progress(total_files, cnt)
+				dst_size = dst_path.stat().st_size
 				if dst_size != src_size:
 					self._warning(self._labels.mismatching_sizes.replace('#',
-						f'{src_file_path} => {src_size}, {dst_file_path} => {dst_size}')
+						f'{src_path}: {src_size} byte(s), {dst_path}: {dst_size} bytes(s)')
 					)
 					mismatches += 1
+					bad_dst_file_paths.add(dst_path)
 			self._info(self._labels.size_check_finished)
 		if self._hashes and hash_thread.is_alive():
 			self._info(self._labels.hashing_in_progress)
@@ -124,7 +126,21 @@ class Copy:
 				sleep(.25)
 			hash_thread.join()
 			self._info(self._labels.hashing_finished)
-			print(hash_thread.files)
+		if self._verify and self._verify != 'size':
+			self._info(self._labels.starting_hash_verification)
+			for cnt, hash_sets in enumerate(hash_thread.files, start=1):
+				self._echo_file_progress(total_files, cnt)
+				dst_hash = FileHash.hashsum(hash_set['dst_path'], algorithm=self._verify)
+				if dst_hash != hash_set[self._verify]:
+					self._warning(self._labels.mismatching_hashes.replace('#',
+						f'{hash_set["src_path"]}: {hash_set[self._verify]}, {hash_set["dst_path"]}: {dst_hash}')
+					)
+					mismatches += 1
+					bad_dst_file_paths.add(hash_set['dst_path'])
+			self._info(self._labels.hash_check_finished)
+			
+			
+		print(hash_thread.files)
 
 		return ### DEBUG ###
 
@@ -195,6 +211,10 @@ class Copy:
 			ex = ChildProcessError(self._labels.robocopy_problem.replace('#', f'{returncode}'))
 			self._error(ex)
 			raise ex
+
+	def	_echo_file_progress(self, total, this):
+		'''Show progress of processing files'''
+		self._echo(f'{this} {self._labels.of_files.replace("#", total)}, {int(100*cnt/total)}%', end='\r')
 
 class OldHashedRoboCopy:
 	'''Tool to copy files using RoboCopy and build hashes'''
