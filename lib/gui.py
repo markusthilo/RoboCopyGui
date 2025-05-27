@@ -222,10 +222,6 @@ class Gui(Tk):
 		if directory := askdirectory(title=self._labels.select_log, mustexist=False):
 			self._log.set(directory)
 			self._config.log_dir = directory
-	
-	def get_log_dir(self):
-		'''Get log directory'''
-		return Path(self._log.get()).absolute()
 
 	def echo(self, *args, end=None):
 		'''Write message to info field (ScrolledText)'''
@@ -279,20 +275,41 @@ class Gui(Tk):
 				self._simulate_button_text.set(self._labels.stop_button)
 				self._start_worker(src_paths, dst_path, None, None, True)
 
+	def _mk_logdir(self, log_dir):
+		'''Create log directory if not exists'''
+		try:
+			log_dir_path = Path(log_dir).absolute()
+			log_dir_path.parent.mkdir(parents=True, exist_ok=True)
+			self._config.log_dir = f'{log_dir_path}'
+		except Exception as ex:
+			showerror(
+				title = self._labels.warning,
+				message = f'{self._labels.invalid_log_path.replace("#", log_dir)}\n{type(ex): {ex}}'
+			)
+			return True
+
 	def _execute(self):
 		'''Start copy process / worker'''
 		src_paths = self._get_source_paths()
 		dst_path = self._get_destination_path()
 		if src_paths and dst_path:
-			if log_dir := self._log_entry.get():
-				self._config.log_dir = log_dir
-				log_dir_path = Path(log_dir)
+			if log_dir := self._log_entry.get() and self._mk_log_dir(log_dir):
+				return
 			elif self._config.hashes:
 				self._select_log()
 				if not self._config.log_dir:
 					showerror(title=self._labels.warning, message=self._labels.log_required)
 					return
-				log_dir_path = Path(log_dir)
+				if self._mk_log_dir(log_dir):
+					return
+			try:
+				dst_path.mkdir(exist_ok=True)
+			except Exception as ex:
+				showerror(
+					title = self._labels.warning,
+					message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
+				)
+				return
 			self._config.log_dir = log_dir
 			self._simulate_button.configure(state='disabled')
 			self._exec_button.configure(state='disabled')
