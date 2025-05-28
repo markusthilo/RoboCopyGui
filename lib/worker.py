@@ -16,17 +16,17 @@ class Copy:
 		tsv_path=None, log_path=None, hashes=None, verify=None, simulate=False, echo=print, kill=None
 	):
 		'''Create object'''
-		self._src_paths = src_paths					# given source paths
-		self._dst_path = dst_path.resolve()			# given destination path
-		self._app_path = app_path					# root directory of robocopygui.py or robocopygui.exe
-		self._labels = labels						# phrases for logging etc. ("language package")
-		self._tsv_path = tsv_path					# path to write file list (None will prevent writing one)
-		self._log_path = log_path					# path to additional log (given by user, None will only write lastlog in app folder)
-		self._hashes = None if simulate else hashes	# list of hash algorithms to be calculated
-		self._verify = None if simulate else verify	# algorithm or method to compare files in source and destination
-		self._simulate = simulate					# True to run robocopy with /l = only list files, do not copy
-		self._echo = echo							# method to show messages (print or from gui)
-		self._kill = kill							# event to stop copy process
+		self._src_paths = src_paths						# given source paths
+		self._dst_path = dst_path.resolve()				# given destination path
+		self._app_path = app_path						# root directory of robocopygui.py or robocopygui.exe
+		self._labels = labels							# phrases for logging etc. ("language package")
+		self._tsv_path = tsv_path						# path to write file list (None will prevent writing one)
+		self._log_path = None if simulate else log_path	# path to additional log (given by user, None will only write lastlog in app folder)
+		self._hashes = None if simulate else hashes		# list of hash algorithms to be calculated
+		self._verify = None if simulate else verify		# algorithm or method to compare files in source and destination
+		self._simulate = simulate						# True to run robocopy with /l = only list files, do not copy
+		self._echo = echo								# method to show messages (print or from gui)
+		self._kill = kill								# event to stop copy process
 
 	def run(self):
 		'''Execute copy process (or simulation)'''
@@ -70,15 +70,15 @@ class Copy:
 		total_bytes = Size(0)	# total size of all files to copy
 		for this_src_dir_path in src_dir_paths:
 			for path in this_src_dir_path.rglob('*'):
-				if src_path.is_file():
+				if path.is_file():
 					size = path.stat().st_size
-					files.append((path, size, self._dst_path / path.relative_to(this_src_dir_path)))
+					files.append((path, size, self._dst_path / path.relative_to(this_src_dir_path.parent)))
 					total_bytes += size
 		for path in src_file_paths:
 			size = path.stat().st_size
 			files.append((path, size, self._dst_path / path.name))
 			total_bytes += size
-		self._info(f'{self._labels.done_reading}: {len(src_files)} {self._labels.file_s}, {total_bytes.readable()}')
+		self._info(f'{self._labels.done_reading}: {len(files)} {self._labels.file_s}, {total_bytes.readable()}')
 		if self._hashes:
 			self._info(self._labels.starting_hashing)
 			hash_thread = HashThread(files, algorithms=self._hashes)
@@ -88,14 +88,14 @@ class Copy:
 			self._info(self._labels.executing.replace('#',
 				f'{self._robocopy.mk_cmd(src_path, dst_path, simulate=self._simulate)}')
 			)
-			#self._robocopy.popen()
-			#self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
+			self._robocopy.popen()
+			self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
 		for src_path in src_file_paths:
 			self._info(self._labels.executing.replace('#',
 				f'{self._robocopy.mk_cmd(src_path.parent, self._dst_path, file=src_path.name, simulate=self._simulate)}')
 			)
-			#self._robocopy.popen()
-			#self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
+			self._robocopy.popen()
+			self._chck_returncode(self._robocopy.wait(kill=self._kill, echo=self._echo))
 		self._info(self._labels.robocopy_finished)
 		total_files = len(files)
 		mismatches = 0
@@ -152,11 +152,14 @@ class Copy:
 				for cnt, hash_set in enumerate(hash_thread.files, start=1):
 					self._echo_file_progress(total_files, cnt)
 					print(f'{"\t".join(hash_set[key] for key in hash_thread.keys)}')
-		end_time = perf_counter()
-		delta = end_time - start_time
-		self._info(self._labels.copy_finished.replace('#', f'{timedelta(seconds=delta)}'))
-		logger.removeHandler(remote_log_fh)
-		return 'error' if mismatches else 'green'
+		if self._simulate:
+			self._info(self._labels.simulation_finished)
+		else:
+			end_time = perf_counter()
+			delta = end_time - start_time
+			self._info(self._labels.copy_finished.replace('#', f'{timedelta(seconds=delta)}'))
+		logging.shutdown()
+		return 'error' if mismatches else None if self._simulate else 'green'
 
 	def _info(self, msg):
 		'''Log info and echo message'''

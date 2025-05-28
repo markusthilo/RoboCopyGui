@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
+from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 from pathlib import Path
 
 class RoboCopy:
@@ -13,9 +13,6 @@ class RoboCopy:
 		'''Prepare RoboCopy arguments'''
 		self._args = ['/fp', '/ns', '/njh', '/njs', '/nc']
 		self._cmd = [self.CMD, '/?']
-
-		return ##### DEBUG #####
-
 		self._startupinfo = STARTUPINFO()
 		self._startupinfo.dwFlags |= STARTF_USESHOWWINDOW
 		try:
@@ -25,7 +22,7 @@ class RoboCopy:
 				elif line.lower().startswith('/compress'):
 					self._args.append('/compress')
 		except Exception as ex:
-			raise ChildProcessError(f'Unable to execute "robocopy /?":\n{ex}')
+			raise ChildProcessError(f'Unable to execute "robocopy /?"\n\t{type(ex)}: {ex}')
 
 	def __repr__(self):
 		'''Return command line as string'''
@@ -46,8 +43,8 @@ class RoboCopy:
 	def popen(self):
 		'''Launch RoboCopy process'''
 		self.process = Popen(self._cmd,
-			#stdout = PIPE,
-			#stderr = STDOUT,
+			stdout = PIPE,
+			stderr = STDOUT,
 			encoding = 'utf-8',
 			errors = 'ignore',
 			universal_newlines = True,
@@ -63,11 +60,11 @@ class RoboCopy:
 				raise SystemExit('Kill signal')
 			if stripped := line.strip():
 				yield stripped
-		self.returncode = proc.wait()
+		self.returncode = self.process.wait()
 
 	def wait(self, kill=None, echo=print):
 		'''Run RoboCopy and yield progress '''
-		for line in self._robocopy.run(kill=kill):
+		for line in self.run(kill=kill):
 			if line.endswith('%'):
 				echo(line, end='\r')
 			else:

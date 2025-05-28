@@ -275,33 +275,37 @@ class Gui(Tk):
 				self._simulate_button_text.set(self._labels.stop_button)
 				self._start_worker(src_paths, dst_path, None, None, True)
 
-	def _mk_logdir(self, log_dir):
+	def _mk_log_dir(self, log_dir):
 		'''Create log directory if not exists'''
 		try:
-			log_dir_path = Path(log_dir).absolute()
-			log_dir_path.parent.mkdir(parents=True, exist_ok=True)
+			log_dir_path = Path(log_dir).resolve()
+			log_dir_path.mkdir(parents=True, exist_ok=True)
 			self._config.log_dir = f'{log_dir_path}'
 		except Exception as ex:
 			showerror(
 				title = self._labels.warning,
-				message = f'{self._labels.invalid_log_path.replace("#", log_dir)}\n{type(ex): {ex}}'
+				message = f'{self._labels.invalid_log_path.replace("#", log_dir_path)}\n{type(ex): {ex}}'
 			)
-			return True
+			return None
+		return log_dir_path
 
 	def _execute(self):
 		'''Start copy process / worker'''
 		src_paths = self._get_source_paths()
 		dst_path = self._get_destination_path()
 		if src_paths and dst_path:
-			if log_dir := self._log_entry.get() and self._mk_log_dir(log_dir):
-				return
+			if log_dir := self._log_entry.get():
+				log_dir_path = self._mk_log_dir(log_dir)
+				if not log_dir_path:
+					return
 			elif self._config.hashes:
 				self._select_log()
 				if not self._config.log_dir:
 					showerror(title=self._labels.warning, message=self._labels.log_required)
 					return
-				if self._mk_log_dir(log_dir):
-					return
+				log_dir_path = self._mk_log_dir(log_dir)
+				if not log_dir_path:
+						return
 			try:
 				dst_path.mkdir(exist_ok=True)
 			except Exception as ex:
@@ -352,6 +356,7 @@ class Gui(Tk):
 
 	def finished(self, returncode):
 		'''Run this when worker has finished copy process'''
+		self._work_thread = None
 		if returncode == 'error':
 			self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
 			self._warning_state = 'enable'

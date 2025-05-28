@@ -43,10 +43,8 @@
     "hashing_in_progress": "Führe die Hash-Wert-Berechnung fort",
     "hashing_finished": "Hash-Wert-Berechnung ist abgeschlossen",
     "starting_hash_verification": "Starte Überprüfung anhand Hash-Wert",
-
-
-
     "warning_sizes": "Bei # Datei(en) stimmt die Größe der Zieldatei nicht mit der Ausgangsdatei überein",
+    "simulation_finished": "Das Simulieren des Kopiervorgangs ist beendet",
     "copy_finished": "Fertig - das Kopieren dauerte # (Stunden, Minuten, Sekunden)",
 	
     "error": "Fehler",
