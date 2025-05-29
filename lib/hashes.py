@@ -34,8 +34,8 @@ class HashThread(Thread):
 	def run(self):
 		'''Calculate all hashes (multiple algorithms) in parallel - this method launches the worker'''
 		self.files = [
-			{'src_path': path, 'src_size': size} | {alg: FileHash.hashsum(path, algorithm=alg) | {'dst_path': dst_path}
-				for alg in self._algorithms
-			}
+			{'src_path': src_path, 'src_size': size}
+			| {alg: FileHash.hashsum(src_path, algorithm=alg) for alg in self._algorithms}
+			| {'dst_path': dst_path}
 			for src_path, size, dst_path in self._files
 		]

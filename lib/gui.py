@@ -84,10 +84,10 @@ class Gui(Tk):
 		self._pad = int(font_size * self._defs.pad_factor)
 		frame = Frame(self)
 		frame.grid(row=0, column=0, sticky='nw')
-		self._source_dir_button = Button(frame, text=self._labels.directory, command=self._select_dir)
+		self._source_dir_button = Button(frame, text=self._labels.directory, command=self._select_source_dir)
 		self._source_dir_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_dir_button, self._labels.source_dir_tip)
-		self._source_file_button = Button(frame, text=self._labels.file_s, command=self._select_files)
+		self._source_file_button = Button(frame, text=self._labels.file_s, command=self._select_source_files)
 		self._source_file_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_file_button, self._labels.source_file_tip)
 		self._source_text = ScrolledText(self, font=(font_family, font_size))
@@ -138,43 +138,83 @@ class Gui(Tk):
 		self._quit_button.grid(row=6, column=1, sticky='e', padx=self._pad, pady=self._pad)
 		self._init_warning()
 
-	def _get_source_paths(self):
-		'''Read directory paths from text field'''
+	def _read_source_paths(self):
+		'''Read paths from text field'''
 		if text := self._source_text.get('1.0', 'end').strip():
-			return [Path(source.strip()).absolute() for source in text.split('\n')]
+			return [Path(line.strip()).absolute() for line in text.split('\n')]
+		return ()
 
-	def _new_source_path(self, string):
-		'''Return absolute source path if not already in field'''
-		string = string.strip()
-		if string:
-			new_path = Path(string).absolute()
-			old_paths = self._get_source_paths()
-			if old_paths and new_path in old_paths:
-				return
-			return new_path
+	def _chck_source_path(self, source):
+		'''Check if source path is valid'''
+		if not source:
+			return
+		path = Path(source)
+		if path.exists():
+			return path
+			showerror(title=self._labels.error, message=self._labels.src_path_not_found.replace('#', f'{path}'))
 
-	def _select_dir(self):
+	def _select_source_dir(self):
 		'''Select directory to add into field'''
-		if dir_path := self._new_source_path(askdirectory(title=self._labels.select_dir, mustexist=True)):
-			self._source_text.insert('end', f'{dir_path}\n')
+		if directory := askdirectory(title=self._labels.select_dir, mustexist=True):
+			path = Path(directory).absolute()
+			if path in self._read_source_paths():
+				showerror(title=self._labels.error, message=self._labels._already_added.replace('#', f'{path}'))
+				return
+			self._source_text.insert('end', f'{path}\n')
 
-	def _select_files(self):
+	def _select_source_files(self):
 		'''Select file(s) to add into field'''
-		filenames = askopenfilenames(title=self._labels.select_files)
-		if filenames:
+		if filenames := askopenfilenames(title=self._labels.select_files):
 			for filename in filenames:
-				if path := self._new_source_path(filename):
-					self._source_text.insert('end', f'{path}\n')
+				path = Path(filename).absolute()
+				if path in self._read_source_paths():
+					showerror(title=self._labels.error, message=self._labels._already_added.replace('#', f'{path}'))
+					return
+				self._source_text.insert('end', f'{path}\n')
+
+	def _get_source_paths(self):
+		'''Get source paths from text field'''
+		unverified_paths = self._read_source_paths()
+		if not unverified_paths:
+			showerror(title=self._labels.error, message=self._labels.no_source)
+			return
+		src_paths = list()
+		for path in unverified_paths:
+			src_path = self._chck_source_path(path)
+			if not src_path:
+				return
+			src_paths.append(src_path)
+		return src_paths
+
+	def _check_destination(self, destination):
+		'''Check if destination directory is valid'''
+		if destination:
+			dst_path = Path(destination).absolute()
+		else:
+			return
+		if not dst_path.exists():
+			return dst_path
+		if not dst_path.is_dir():
+			showerror(self._labels.error, self._labels.dst_no_dir.replace('#', f'{dst_path}'))
+			return
+		for path in dst_path.iterdir():
+			if path.is_dir() and path.name in ('$RECYCLE.BIN', 'System Volume Information'):
+				continue
+			if askyesno(self._labels.warning, self._labels.dst_not_empty.replace('#', f'{dst_path}')):
+				break
+		return dst_path
 
 	def _select_destination(self):
 		'''Select destination directory'''
-		if directory := askdirectory(title=self._labels.select_destination, mustexist=False):
-			self._destination.set(directory)
+		if dst_dir := self._check_destination(askdirectory(title=self._labels.select_destination, mustexist=False)):
+			self._destination.set(dst_dir)
 	
 	def _get_destination_path(self):
 		'''Get destination directory'''
-		destination = self._destination.get()
-		return Path(destination).absolute() if destination else None
+		dst_path = self._check_destination(self._destination.get())
+		if dst_path:
+			return dst_path
+		showerror(title=self._labels.error, message=self._labels.no_destination)
 
 	def _gen_hash_list(self):
 		'''Generate list of hashes to check'''
@@ -243,8 +283,12 @@ class Gui(Tk):
 		self._info_text.configure(foreground=self._info_fg, background=self._info_bg)
 		self._warning_state = 'stop'
 
-	def _start_worker(self, src_paths, dst_path, tsv_path, log_path, simulate):
+	def _start_worker(self, src_paths, dst_path, simulate):
 		'''Disable source selection and start worker'''
+		if log_dir := self._log_entry.get():
+			log_dir_path = self._mk_log_dir(log_dir)
+			if not log_dir_path:
+				return
 		self._exec_button.configure(state='disabled')
 		self._clear_info()
 		self._work_thread = WorkThread(
@@ -252,8 +296,8 @@ class Gui(Tk):
 			dst_path,
 			self._app_path,
 			self._labels,
-			tsv_path,
-			log_path,
+			log_dir_path / strftime(self._config.tsv_name) if log_dir else None,
+			log_dir_path / strftime(self._config.log_name) if log_dir else None,
 			self._config.hashes,
 			self._config.verify,
 			simulate,
@@ -261,19 +305,6 @@ class Gui(Tk):
 			self.finished
 		)
 		self._work_thread.start()
-
-	def _simulate(self):
-		'''Run simulation'''
-		src_paths = self._get_source_paths()
-		dst_path = self._get_destination_path()
-		if src_paths and dst_path:
-			if self._work_thread:
-				self._simulate_button_text.set(self._labels.simulate_button)
-				self._work_thread.kill()
-				self._work_thread = None
-			else:
-				self._simulate_button_text.set(self._labels.stop_button)
-				self._start_worker(src_paths, dst_path, None, None, True)
 
 	def _mk_log_dir(self, log_dir):
 		'''Create log directory if not exists'''
@@ -289,41 +320,59 @@ class Gui(Tk):
 			return None
 		return log_dir_path
 
+	def _simulate(self):
+		'''Run simulation'''
+		src_paths = self._get_source_paths()
+		print('src_paths', src_paths)
+		if not src_paths:
+			return
+		dst_path = self._get_destination_path()
+		if not dst_path:
+			return
+		if self._work_thread:
+			self._simulate_button_text.set(self._labels.simulate_button)
+			self._work_thread.kill()
+			self._work_thread = None
+		else:
+			self._simulate_button_text.set(self._labels.stop_button)
+			self._start_worker(src_paths, dst_path, None, True)
+
 	def _execute(self):
 		'''Start copy process / worker'''
 		src_paths = self._get_source_paths()
+		if not src_paths:
+			return
 		dst_path = self._get_destination_path()
-		if src_paths and dst_path:
-			if log_dir := self._log_entry.get():
-				log_dir_path = self._mk_log_dir(log_dir)
-				if not log_dir_path:
-					return
-			elif self._config.hashes:
-				self._select_log()
-				if not self._config.log_dir:
-					showerror(title=self._labels.warning, message=self._labels.log_required)
-					return
-				log_dir_path = self._mk_log_dir(log_dir)
-				if not log_dir_path:
-						return
-			try:
-				dst_path.mkdir(exist_ok=True)
-			except Exception as ex:
-				showerror(
-					title = self._labels.warning,
-					message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
-				)
+		if not dst_path:
+			return
+		if log_dir := self._log_entry.get():
+			log_dir_path = self._mk_log_dir(log_dir)
+			if not log_dir_path:
 				return
-			self._config.log_dir = log_dir
-			self._simulate_button.configure(state='disabled')
-			self._exec_button.configure(state='disabled')
-			self._start_worker(
-				src_paths,
-				dst_path,
-				log_dir_path / strftime(self._config.tsv_name) if log_dir else None,
-				log_dir_path / strftime(self._config.log_name) if log_dir else None,
-				False
+		elif self._config.hashes:
+			self._select_log()
+			if not self._config.log_dir:
+				showerror(title=self._labels.warning, message=self._labels.log_required)
+				return
+			log_dir_path = self._mk_log_dir(log_dir)
+			if not log_dir_path:
+					return
+		try:
+			dst_path.mkdir(exist_ok=True)
+		except Exception as ex:
+			showerror(
+				title = self._labels.warning,
+				message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
 			)
+			return
+		self._config.log_dir = log_dir
+		self._simulate_button.configure(state='disabled')
+		self._exec_button.configure(state='disabled')
+		self._start_worker(
+			src_paths,
+			dst_path,
+			False
+		)
 
 	def _init_warning(self):
 		'''Init warning functionality'''
@@ -372,7 +421,10 @@ class Gui(Tk):
 		if self._work_thread:
 			if not askyesno(title=self._labels.warning, message=self._labels.running_warning):
 				return
-			self._work_thread.kill()
+			try:
+				self._work_thread.kill()
+			except:
+				pass
 		self._config.log_dir = self._log_entry.get()
 		try:
 			self._config.save()
