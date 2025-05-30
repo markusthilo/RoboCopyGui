@@ -84,22 +84,21 @@ class Copy:
 					collisions.append((src_path, size, dst_path), True)
 				else:
 					self._echo(msg)
-					collisions.append((src_path, size, dst_path), False)
+					collisions.append((src_path, size, dst_path, False))
 				if self._kill and self._kill.is_set():
-					self._echo(self._labels.simulation_aborted)
-					logging.shutdown()
-					return
-			####################################################
-			### write file list to tsv file if requested ###
-			if self._tsv_path:
-				try:
-					with open(self._tsv_path, 'w', encoding='utf-8') as tsv_fh:
-						for src_path, size, dst_path in files:
-							tsv_fh.write(f'{src_path}\t{size}\t{dst_path}\n')
-				except Exception as ex:
-					self._abort(ex)
-			####################################################
-			self._info(self._labels.simulation_finished)
+					break
+			if self._tsv_path:	# write simple file list when simulating 
+				with self._tsv_path.open('w', encoding='utf-8') as fh:
+					print('src_path\tsrc_size\tdst_path\tdst_exists', file=fh)
+					for src_path, size, dst_path, exists in collisions:
+						collision = dst_path.name if exists else ''
+						print(f'{src_path}\t{Size(size).readable()}\t{dst_path}\t{collision}', file=fh)
+			if collisions:
+				self._info(self._labels.collisions.replace('#', f'{len(collisions)}'))
+			if self._kill and self._kill.is_set():
+				self._echo(self._labels.simulation_aborted)
+			else:
+				self._info(self._labels.simulation_finished)
 			logging.shutdown()
 			return
 		if self._hashes:	### start hashing ###

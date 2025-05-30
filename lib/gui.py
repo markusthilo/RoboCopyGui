@@ -315,7 +315,7 @@ class Gui(Tk):
 		except Exception as ex:
 			showerror(
 				title = self._labels.warning,
-				message = f'{self._labels.invalid_log_path.replace("#", log_dir_path)}\n{type(ex): {ex}}'
+				message = f'{self._labels.invalid_log_path.replace("#", f"{log_dir_path}")}\n{type(ex): {ex}}'
 			)
 			return None
 		return log_dir_path
@@ -323,7 +323,6 @@ class Gui(Tk):
 	def _simulate(self):
 		'''Run simulation'''
 		src_paths = self._get_source_paths()
-		print('src_paths', src_paths)
 		if not src_paths:
 			return
 		dst_path = self._get_destination_path()
@@ -335,7 +334,7 @@ class Gui(Tk):
 			self._work_thread = None
 		else:
 			self._simulate_button_text.set(self._labels.stop_button)
-			self._start_worker(src_paths, dst_path, None, True)
+			self._start_worker(src_paths, dst_path, True)
 
 	def _execute(self):
 		'''Start copy process / worker'''
