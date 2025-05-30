@@ -186,35 +186,32 @@ class Gui(Tk):
 			src_paths.append(src_path)
 		return src_paths
 
-	def _check_destination(self, destination):
-		'''Check if destination directory is valid'''
-		if destination:
-			dst_path = Path(destination).absolute()
-		else:
+	def _select_destination(self):
+		'''Select destination directory'''
+		if dst_dir := askdirectory(title=self._labels.select_destination, mustexist=False):
+			self._destination.set(dst_dir)
+	
+	def _get_destination_path(self):
+		'''Get destination directory'''
+		dst_dir = self._destination.get()
+		if not dst_dir:
+			showerror(title=self._labels.error, message=self._labels.no_destination)
 			return
+		dst_path = Path(dst_dir).absolute()
 		if not dst_path.exists():
 			return dst_path
 		if not dst_path.is_dir():
 			showerror(self._labels.error, self._labels.dst_no_dir.replace('#', f'{dst_path}'))
 			return
+		top = dst_path.samefile(dst_path.parent)
 		for path in dst_path.iterdir():
-			if path.is_dir() and path.name in ('$RECYCLE.BIN', 'System Volume Information'):
+			if top and path.is_dir() and path.name.upper() in ('$RECYCLE.BIN', 'SYSTEM VOLUME INFORMATION'):
 				continue
 			if askyesno(self._labels.warning, self._labels.dst_not_empty.replace('#', f'{dst_path}')):
 				break
+			else:
+				return
 		return dst_path
-
-	def _select_destination(self):
-		'''Select destination directory'''
-		if dst_dir := self._check_destination(askdirectory(title=self._labels.select_destination, mustexist=False)):
-			self._destination.set(dst_dir)
-	
-	def _get_destination_path(self):
-		'''Get destination directory'''
-		dst_path = self._check_destination(self._destination.get())
-		if dst_path:
-			return dst_path
-		showerror(title=self._labels.error, message=self._labels.no_destination)
 
 	def _gen_hash_list(self):
 		'''Generate list of hashes to check'''
@@ -283,12 +280,37 @@ class Gui(Tk):
 		self._info_text.configure(foreground=self._info_fg, background=self._info_bg)
 		self._warning_state = 'stop'
 
+	def _mk_log_dir(self, log_dir):
+		'''Create log directory if not exists'''
+		if log_dir:
+			try:
+				log_dir_path = Path(log_dir).absolute()
+				log_dir_path.mkdir(parents=True, exist_ok=True)
+				self._config.log_dir = f'{log_dir_path}'
+			except Exception as ex:
+				showerror(
+					title = self._labels.warning,
+					message = f'{self._labels.invalid_log_path.replace("#", f"{log_dir_path}")}\n{type(ex)}: {ex}'
+				)
+				return
+			return log_dir_path
+
 	def _start_worker(self, src_paths, dst_path, simulate):
 		'''Disable source selection and start worker'''
-		if log_dir := self._log_entry.get():
-			log_dir_path = self._mk_log_dir(log_dir)
+		log_dir_path = self._mk_log_dir(self._log_entry.get())
+		if not log_dir_path and self._config.hashes and not simulate:
+			self._select_log()
+			if not self._config.log_dir:
+				showerror(title=self._labels.warning, message=self._labels.log_required)
+				return
+			log_dir_path = self._mk_log_dir(self._log_entry.get())
 			if not log_dir_path:
 				return
+		self._config.log_dir = log_dir_path
+		try:
+			self._config.save()
+		except:
+			pass
 		self._exec_button.configure(state='disabled')
 		self._clear_info()
 		self._work_thread = WorkThread(
@@ -296,8 +318,8 @@ class Gui(Tk):
 			dst_path,
 			self._app_path,
 			self._labels,
-			log_dir_path / strftime(self._config.tsv_name) if log_dir else None,
-			log_dir_path / strftime(self._config.log_name) if log_dir else None,
+			log_dir_path / strftime(self._config.tsv_name) if log_dir_path else None,
+			log_dir_path / strftime(self._config.log_name) if log_dir_path else None,
 			self._config.hashes,
 			self._config.verify,
 			simulate,
@@ -305,20 +327,6 @@ class Gui(Tk):
 			self.finished
 		)
 		self._work_thread.start()
-
-	def _mk_log_dir(self, log_dir):
-		'''Create log directory if not exists'''
-		try:
-			log_dir_path = Path(log_dir).resolve()
-			log_dir_path.mkdir(parents=True, exist_ok=True)
-			self._config.log_dir = f'{log_dir_path}'
-		except Exception as ex:
-			showerror(
-				title = self._labels.warning,
-				message = f'{self._labels.invalid_log_path.replace("#", f"{log_dir_path}")}\n{type(ex): {ex}}'
-			)
-			return None
-		return log_dir_path
 
 	def _simulate(self):
 		'''Run simulation'''
@@ -344,18 +352,6 @@ class Gui(Tk):
 		dst_path = self._get_destination_path()
 		if not dst_path:
 			return
-		if log_dir := self._log_entry.get():
-			log_dir_path = self._mk_log_dir(log_dir)
-			if not log_dir_path:
-				return
-		elif self._config.hashes:
-			self._select_log()
-			if not self._config.log_dir:
-				showerror(title=self._labels.warning, message=self._labels.log_required)
-				return
-			log_dir_path = self._mk_log_dir(log_dir)
-			if not log_dir_path:
-					return
 		try:
 			dst_path.mkdir(exist_ok=True)
 		except Exception as ex:
@@ -364,7 +360,6 @@ class Gui(Tk):
 				message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
 			)
 			return
-		self._config.log_dir = log_dir
 		self._simulate_button.configure(state='disabled')
 		self._exec_button.configure(state='disabled')
 		self._start_worker(

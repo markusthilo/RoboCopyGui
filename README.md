@@ -1,5 +1,7 @@
 # RoboCopyGui
-This is a graphical user interface for MS Windows' RoboCopy. It is still under construction!
+This is a graphical user interface for MS Windows' RoboCopy.
+
+2025-05-03: Version 0.0.1 is a pre-release, alpha, testing only! 
 
 ## Installation (Developers)
 Clone the repo. The make batch script uses Nuitka to build executable:
@@ -10,6 +12,7 @@ The little batch script now should do the work:
 ```
 $ make-dist.bat
 ```
+Be aware that Nuitka might not work with the newest Python version.
 
 ## Download
 Download the latest release from GitHub and unpack anywhere. The application is portable. No installation required.

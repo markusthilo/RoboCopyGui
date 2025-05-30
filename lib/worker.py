@@ -55,7 +55,7 @@ class Copy:
 			elif src_path.is_file():
 				src_file_paths.add(src_path)
 			else:
-				msg = self._labels.invalid_path.replace('#', '{path}')
+				msg = self._labels.invalid_path.replace('#', f'{path}')
 				logging.error(msg)
 				self._echo(msg)
 				raise FileNotFoundError(msg)
@@ -77,11 +77,13 @@ class Copy:
 		if self._simulate:	### sumilating copy process ###
 			self._info(self._labels.starting_simulation)
 			collisions = list()
+			col_cnt = 0
 			for src_path, size, dst_path in files:
 				msg = f'{src_path} ({Size(size).readable()}) -> {dst_path}'
 				if dst_path.exists():
 					self._echo(f'{msg} {self._labels.existing}')
-					collisions.append((src_path, size, dst_path), True)
+					collisions.append((src_path, size, dst_path, True))
+					col_cnt += 1
 				else:
 					self._echo(msg)
 					collisions.append((src_path, size, dst_path, False))
@@ -93,8 +95,8 @@ class Copy:
 					for src_path, size, dst_path, exists in collisions:
 						collision = dst_path.name if exists else ''
 						print(f'{src_path}\t{Size(size).readable()}\t{dst_path}\t{collision}', file=fh)
-			if collisions:
-				self._info(self._labels.collisions.replace('#', f'{len(collisions)}'))
+			if col_cnt:
+				self._info(self._labels.collisions.replace('#', f'{col_cnt}'))
 			if self._kill and self._kill.is_set():
 				self._echo(self._labels.simulation_aborted)
 			else:
@@ -110,24 +112,12 @@ class Copy:
 			self._info(self._labels.executing.replace('#',
 				f'{self._robocopy.mk_cmd(src_path, dst_path)}')
 			)
-			self._robocopy.popen()
-			for line in self._robocopy.run(kill=self._kill):
-				if line.endswith('%'):
-					self._echo(line, end='\r')
-				else:
-					self._echo(line)
-			self._chck_returncode(self._robocopy.returncode)
+			self._run_robocopy()
 		for src_path in src_file_paths:	### copy files ###
 			self._info(self._labels.executing.replace('#',
 				f'{self._robocopy.mk_cmd(src_path.parent, self._dst_path, file=src_path.name)}')
 			)
-			self._robocopy.popen()
-			for line in self._robocopy.run(kill=self._kill):
-				if line.endswith('%'):
-					self._echo(line, end='\r')
-				else:
-					self._echo(line)
-			self._chck_returncode(self._robocopy.returncode)
+			self._run_robocopy()
 		self._info(self._labels.robocopy_finished)
 		total_files = len(files)
 		mismatches = 0
@@ -152,7 +142,7 @@ class Copy:
 						bad_dst_size = bad_dst_file_paths[dst_path] if dst_path in bad_dst_file_paths else ''
 						print(f'{src_path}\t{src_size}\t{dst_path}\t{bad_dst_size}', file=fh)
 		if self._hashes:	### wait until hashing is finished ###
-			self._info(self._labels.waiting_for_hashing)
+			self._info(self._labels.waiting_end_hashing)
 			if hash_thread.is_alive():
 				self._info(self._labels.hashing_in_progress)
 				index = 0
@@ -181,15 +171,23 @@ class Copy:
 						bad_dst_hash = ''
 					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}\t{bad_dst_hash}', file=fh)
 			self._info(self._labels.hash_check_finished.replace('#', f'{self._verify}'))
-		if not self._verify and self._hashes:	### write simple tsv file without hashes ### 
+		if self._hashes and not self._verify:	### write tsv file without verification ###
 			with self._tsv_path.open('w', encoding='utf-8') as fh:
 				print(f'{"\t".join(hash_thread.keys)}', file=fh)
 				for cnt, hash_set in enumerate(hash_thread.files, start=1):
 					self._echo_file_progress(total_files, cnt)
 					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}', file=fh)
+		if self._hashes and self._verify == 'size':	### write tsv file with size verification ###
+			with self._tsv_path.open('w', encoding='utf-8') as fh:
+				print(f'{"\t".join(hash_thread.keys)}\tbad_dst_size', file=fh)
+				for cnt, hash_set in enumerate(hash_thread.files, start=1):
+					bad_dst_size = bad_dst_file_paths[hash_set['dst_path']] if hash_set['dst_path'] in bad_dst_file_paths else ''
+					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}\t{bad_dst_size}', file=fh)
 		end_time = perf_counter()
 		delta = end_time - start_time
 		self._info(self._labels.copy_finished.replace('#', f'{timedelta(seconds=delta)}'))
+		if mismatches:
+			self._warning(self._labels.mismatches.replace('#', f'{mismatches}'))
 		logging.shutdown()
 		return 'error' if mismatches else 'green'
 
@@ -229,6 +227,21 @@ class Copy:
 			self._error(ex)
 			raise ex
 
+	def _run_robocopy(self):
+		'''Run RoboCopy'''
+		for line in self._robocopy.run():
+			if line.endswith('%'):
+				self._echo(line, end='\r')
+			else:
+				self._echo(line)
+			if self._kill and self._kill.is_set():
+				self._robocopy.process.terminate()
+				raise SystemExit('Kill signal')
+		if self._robocopy.returncode > 5:
+			ex = ChildProcessError(self._labels.robocopy_problem.replace('#', f'{self._robocopy.returncode}'))
+			self._error(ex)
+			raise ex
+
 	def	_echo_file_progress(self, total, this):
 		'''Show progress of processing files'''
-		self._echo(f'{this} {self._labels.of_files.replace("#", 'f{total}')}, {int(100*this/total)}%', end='\r')
+		self._echo(f'{this} {self._labels.of_files.replace("#", f"{total}")}, {int(100*this/total)}%', end='\r')

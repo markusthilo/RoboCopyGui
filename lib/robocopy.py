@@ -50,12 +50,10 @@ class RoboCopy:
 		)
 		return self.process
 
-	def run(self, kill=None):
+	def run(self):
 		'''Run RoboCopy and yield stdout'''
-		for line in self.popen().stdout:
-			if kill and kill.is_set():
-				self.process.terminate()
-				raise SystemExit('Kill signal')
+		self.popen()
+		for line in self.process.stdout:
 			if stripped := line.strip():
 				yield stripped
 		self.returncode = self.process.wait()
