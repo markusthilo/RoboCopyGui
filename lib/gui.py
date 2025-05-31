@@ -97,6 +97,7 @@ class Gui(Tk):
 		self._destination = StringVar()
 		self._destination_entry = Entry(self, textvariable=self._destination)
 		self._destination_entry.grid(row=1, column=1, sticky='nsew', padx=self._pad, pady=self._pad)
+		Hovertip(self._destination_button, self._labels.destination_tip)
 		frame = Frame(self)
 		frame.grid(row=2, column=1, sticky='nw')
 		self.possible_hashes = FileHash.get_algorithms()
@@ -115,6 +116,7 @@ class Gui(Tk):
 		self._log = StringVar(value=self._config.log_dir)
 		self._log_entry = Entry(self, textvariable=self._log)
 		self._log_entry.grid(row=3, column=1, sticky='nsew', padx=self._pad, pady=self._pad)
+		Hovertip(self._log_button, self._labels.log_tip)
 		self._simulate_button_text = StringVar(value=self._labels.simulate_button)
 		self._simulate_button = Button(self, textvariable=self._simulate_button_text, command=self._simulate)
 		self._simulate_button.grid(row=4, column=0, sticky='w', padx=self._pad, pady=self._pad)
@@ -136,6 +138,7 @@ class Gui(Tk):
 		self._label_bg = self._info_label.cget('background')
 		self._quit_button = Button(self, text=self._labels.quit, command=self._quit_app)
 		self._quit_button.grid(row=6, column=1, sticky='e', padx=self._pad, pady=self._pad)
+		Hovertip(self._quit_button, self._labels.quit_tip)
 		self._init_warning()
 
 	def _read_source_paths(self):
@@ -158,7 +161,7 @@ class Gui(Tk):
 		if directory := askdirectory(title=self._labels.select_dir, mustexist=True):
 			path = Path(directory).absolute()
 			if path in self._read_source_paths():
-				showerror(title=self._labels.error, message=self._labels._already_added.replace('#', f'{path}'))
+				showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
 				return
 			self._source_text.insert('end', f'{path}\n')
 
@@ -168,7 +171,7 @@ class Gui(Tk):
 			for filename in filenames:
 				path = Path(filename).absolute()
 				if path in self._read_source_paths():
-					showerror(title=self._labels.error, message=self._labels._already_added.replace('#', f'{path}'))
+					showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
 					return
 				self._source_text.insert('end', f'{path}\n')
 
@@ -407,7 +410,7 @@ class Gui(Tk):
 		elif returncode == 'green':
 			self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
 			self._source_text.delete('1.0', 'end')
-			self._destination_entry.set('')
+			self._destination.set('')
 		self.enable_buttons()
 
 	def _quit_app(self):
