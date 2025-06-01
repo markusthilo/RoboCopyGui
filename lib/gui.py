@@ -50,10 +50,10 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run thread'''
-		#try:
-		returncode = self._worker.run()
-		#except:
-		#	returncode = 'error'
+		try:
+			returncode = self._worker.run()
+		except:
+			returncode = 'error'
 		self._finish(returncode)
 
 class Gui(Tk):
