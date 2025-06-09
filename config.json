@@ -1,1 +1,1 @@
-{"log_dir": "C:/Users/user/Documents", "log_name": "%y%m%d_%H%M%S_robolog.txt", "tsv_name": "%y%m%d_%H%M%S_robofiles.csv", "hashes": ["md5", "sha256"], "verify": "md5"}
+{"log_dir": "C:/Users/user/Documents", "log_name": "%y%m%d_%H%M%S_robolog.txt", "tsv_name": "%y%m%d_%H%M%S_robofiles.csv", "last_dir": "C:/Users/user/Documents", "robocopy_parameters": {"/copyall": ["/nocopy"], "/nocopy": ["/copyall"]}, "options": ["/copyall"], "hashes": ["md5", "sha256"], "verify": "size"}

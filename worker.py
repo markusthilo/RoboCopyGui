@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+from sys import executable as __executable__
 from pathlib import Path
 from time import strftime, sleep, perf_counter
 from datetime import timedelta
