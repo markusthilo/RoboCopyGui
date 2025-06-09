@@ -2,20 +2,16 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Markus Thilo'
-__version__ = '0.0.1_2025-06-09'
+__version__ = '0.1.0_2025-06-09'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
 __description__ = 'Dialog for Tk to select multiple existing directories and files'
 
 from pathlib import Path
-from tkinter import Tk, PhotoImage, StringVar, BooleanVar, Checkbutton, Toplevel
+from tkinter import Toplevel
 from tkinter.font import nametofont
-from tkinter.ttk import Frame, Label, Entry, Button, Combobox, Treeview
-from tkinter.ttk import Scrollbar, Spinbox, Progressbar
-from tkinter.scrolledtext import ScrolledText
-from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
-from idlelib.tooltip import Hovertip
+from tkinter.ttk import Frame, Button, Treeview, Scrollbar
 try:
 	from wmi import WMI
 	__winsystem__ = True
@@ -25,8 +21,25 @@ except:
 class AskPathsWindow(Toplevel):
 	'''Filedialog to choose multiple existing directory and file paths'''
 
-	def __init__(self, parent, title=None, confirm=None, cancel=None, restriction=None, multiple=True, initialdir=None):
-		'''Open application window'''
+	def __init__(self, parent,
+			title = None,
+			confirm = None,
+			cancel = None,
+			restriction = None,
+			multiple = True,
+			initialdir = None
+		):
+		'''
+		Open application window
+		
+		parent:			tkinter: parent Tk element / window
+		confirm:		str: text on button "Confirm" (None gives "Confirm")
+		cancel:			str: text on button "Cancel" (None gives "Cancel")
+		restriction:	str / None: "dir" if only directories to select, "file" if only files
+						to select, something else or None if both are OK (default)
+		multiple:		bool: True if more than one item to select (default is True)
+		initialdir:		pathlib.Path/None: directory to focus on open (default is home directory)
+		'''
 		self.selected = list()
 		if __winsystem__:	# on windows multiple root paths / logical drives are possible
 			self._conn = WMI()
@@ -46,7 +59,6 @@ class AskPathsWindow(Toplevel):
 			else:
 				title += 'directories and files' if multiple else 'directory and file'
 		self._restriction = restriction if restriction in ('dir', 'file') else None
-
 		self._focus_path = Path(initialdir).absolute() if initialdir else Path.home()
 		self._focus_path = self._focus_path if self._focus_path.exists() else Path.home()
 		super().__init__()	### tkinter windows configuration ###
@@ -55,14 +67,16 @@ class AskPathsWindow(Toplevel):
 		self.title(title)
 		self.protocol('WM_DELETE_WINDOW', self._cancel)
 		self._font = nametofont('TkTextFont').actual()
-		min_size_x = self._font['size'] * 64
-		min_size_y = self._font['size'] * 48
+		min_size_x = self._font['size'] * 32
+		min_size_y = self._font['size'] * 24
 		self.minsize(min_size_x , min_size_y)
-		self.geometry(f'{min_size_x}x{min_size_y}')
+		self.geometry(f'{min_size_x*2}x{min_size_y*2}')
 		self.resizable(True, True)
+		self.rowconfigure(0, weight=1)
+		self.columnconfigure(0, weight=1)
 		self._pad = int(self._font['size'] * 0.5)
 		frame = Frame(self)
-		frame.pack(fill='both', expand=True, padx=self._pad, pady=self._pad)
+		frame.grid(sticky='nswe', padx=self._pad, pady=self._pad)
 		self._tree = Treeview(frame, show='tree', selectmode='extended' if multiple else 'browse')
 		self._tree.bind('<Double-Button-1>', self._focus)
 		self._tree.bind('<Return>', self._select)
@@ -78,7 +92,7 @@ class AskPathsWindow(Toplevel):
 		vsb.pack(side='right', fill='y')
 		self._tree.configure(yscrollcommand=vsb.set)
 		frame = Frame(self)
-		frame.pack(fill='x', padx=self._pad, pady=self._pad)
+		frame.grid(row=1, sticky='nswe', padx=self._pad, pady=self._pad)
 		Button(frame,
 			text = cancel if cancel else 'Cancel',
 			command = self._cancel
@@ -103,27 +117,31 @@ class AskPathsWindow(Toplevel):
 					return
 			else:
 				paths = self._root_paths
-
 			for path in paths:
 				if path.is_dir():
 					dir_paths.add(path)
 				else:
 					file_paths.add(path)
 			for path in sorted(dir_paths):
-				if 	parent_path:
+				if 	parent_path:	# open folder
 					if path in self._focus_path.parents:
 						text = f'\U0001F5C1 {path.name}'
 						open_tree = True
-					else:
+					elif path == self._focus_path:	# folder in focus
 						text = f'\U0001F5C2 {path.name}'
+						open_tree = True
+					else:	# closed folder
+						text = f'\U0001F5C0 {path.name}'
 						open_tree = False
-				else:
-					text = f'\U0001F5C0 {path}'.rstrip('\\')
+				elif __winsystem__:	# drive
+					text = f'\U0001F5B4 {path}'.rstrip('\\')
+					open_tree = True
+				else:	# root
+					text = '\U0001F5C1 /'
 					open_tree = True
 				self._tree.insert(parent_path, 'end', text=text, iid=path, open=open_tree)
 			for path in sorted(file_paths):
 				self._tree.insert(parent_path, 'end', text=f'\U0001F5C5 {path.name}', iid=path, open=False)
-
 
 	def _focus(self, event):
 		'''Focus to directory'''
@@ -135,18 +153,25 @@ class AskPathsWindow(Toplevel):
 				self._gen_tree()
 				self._tree.focus(item)
 
+	def _accepted_path(self, item):
+		'''Check if path is ok'''
+		path = item if isinstance(item, Path) else Path(item)
+		if self._restriction == 'dir' and path.is_dir():
+			return path
+		elif self._restriction == 'file' and path.is_file():
+			return path
+		elif not self._restriction:
+			return path
+
+	def _filter_to_path(self, items):
+		'''Filter items and yield path thar are OK'''
+		for item in items:
+			if path := self._accepted_path(item):
+				yield path
+
 	def _confirm(self):
 		'''Select button event'''
-		for item in self._tree.selection():
-			path = Path(item)
-			if path not in self.selected:
-				if self._restriction:
-					if self._restriction == 'dir' and path.is_dir():
-						self.selected.append(path)
-					elif path.is_file():
-						self.selected.append(path)
-				else:
-					self.selected.append(item)
+		self.selected = list(self._filter_to_path(self._tree.selection()))
 		self.destroy()
 
 	def _cancel(self):
@@ -156,8 +181,10 @@ class AskPathsWindow(Toplevel):
 
 	def _select(self, dummy):
 		'''Select button event'''
-		if item := self._tree.focus():
-			self._confirm()
+		print(self._tree.focus())
+		if path := self._accepted_path(self._tree.focus()):
+			self._tree.selection_add(path)
+		self._confirm()
 
 	def _deselect(self, dummy):
 		'''Deselect button event'''
@@ -168,8 +195,7 @@ class AskPathsWindow(Toplevel):
 		'''Select all button event'''
 		if item := self._tree.focus():
 			try:
-				self._tree.selection_add([path for path in Path(item).parent.iterdir()])
-				#self._tree.focus(item)
+				self._tree.selection_add(self._filter_to_path(Path(item).parent.iterdir()))
 			except:
 				return
 

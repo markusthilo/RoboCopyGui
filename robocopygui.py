@@ -19,12 +19,12 @@ from tkinter.font import nametofont
 from tkinter.ttk import Frame, Label, Entry, Button, Combobox
 from tkinter.ttk import Scrollbar, Spinbox, Progressbar
 from tkinter.scrolledtext import ScrolledText
-from tkinter.filedialog import askopenfilename, askdirectory
+from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
 #from worker import Copy
 from classes_robo import Config, FileHash
-from tk_askpaths import askpaths
+from tk_pathdialog import askpaths
 
 __parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python' else Path(__executable__).parent
 
@@ -194,30 +194,29 @@ class Gui(Tk):
 
 	def _select_source_files(self):
 		'''Select file(s) to add into field'''
-		if filenames := askopenfilename(title=self._labels.select_files):
-			for filename in filenames:
-				path = Path(filename).absolute()
+		if filenames := askopenfilenames(title=self._labels.select_files):
+			print(filenames, type(filenames), len(filenames))
+			if len(filenames) == 1:
+				path = Path(filenames[0]).absolute()
 				if path in self._read_source_paths():
 					showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
 					return
-				self._source_text.insert('end', f'{path}\n')
+			for filename in filenames:
+				path = Path(filename).absolute()
+				if not path in self._read_source_paths():
+					self._source_text.insert('end', f'{path}\n')
 
 	def _select_multiple(self):
 		'''Select multiple files and directories to add into field'''
-		print(askpaths(
+		if paths := askpaths(
 			title = self._labels.select_multiple,
 			confirm = self._labels.confirm,
 			cancel = self._labels.cancel,
 			initialdir = self._config.last_dir
-		))
-		return
-
-		if directory := askdirectories(title=self._labels.select_dir, mustexist=True):
-			path = Path(directory).absolute()
-			if path in self._read_source_paths():
-				showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
-				return
-			self._source_text.insert('end', f'{path}\n')
+		):
+			for path in paths:
+				if not path in self._read_source_paths():
+					self._source_text.insert('end', f'{path}\n')
 
 	def _get_source_paths(self):
 		'''Get source paths from text field'''
