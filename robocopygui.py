@@ -36,7 +36,7 @@ class WorkThread(Thread):
 		super().__init__()
 		self._finish = finish
 		self._kill_event = Event()
-		#self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
+		self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
 
 	def kill(self):
 		'''Kill thread'''
@@ -48,8 +48,6 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run thread'''
-		self._finish(None)	### DEBUG
-		'''
 		try:
 			returncode = self._worker.run()
 		except Exception as ex:
@@ -57,7 +55,6 @@ class WorkThread(Thread):
 		if self.kill_is_set():
 			returncode = 'killed'
 		self._finish(returncode)
-		'''
 
 class Gui(Tk):
 	'''GUI look and feel'''
@@ -300,7 +297,10 @@ class Gui(Tk):
 			self._config.options.append(choosen)
 			self._config.options.sort()
 			for deselect in self._config.robocopy_parameters[choosen]:
-				self._config.options.remove(deselect)
+				try:
+					self._config.options.remove(deselect)
+				except ValueError:
+					pass
 		self._options_selector['values'] = self._gen_options_list()
 
 	def _hash_event(self, dummy_event):

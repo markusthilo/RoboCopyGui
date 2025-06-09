@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from json import load, dump
-#from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
+from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 from pathlib import Path
 from hashlib import algorithms_available, file_digest
 from threading import Thread
@@ -55,59 +55,53 @@ class Size(int):
 		'''Plus'''
 		return Size(int.__add__(self, other))
 
-class RoboCopy:
+class RoboCopy(Popen):
 	'''Wrapper for RoboCopy'''
 
-	CMD = 'robocopy'
-
-	def __init__(self):
-		'''Prepare RoboCopy arguments'''
-		self._args = ['/z', '/fp', '/ns', '/njh', '/njs', '/nc', '/r:0', '/w:0']
-		self._cmd = [self.CMD, '/?']
+	def __init__(self, src, dst, file=None, parameters=None):
+		'''Prepare RoboCopy'''
 		self._startupinfo = STARTUPINFO()
 		self._startupinfo.dwFlags |= STARTF_USESHOWWINDOW
-		try:
-			for line in self.run():
-				if line.lstrip().lower().startswith('/unicode'):
-					self._args.append('/unicode')
-				elif line.lower().startswith('/compress'):
-					self._args.append('/compress')
-		except Exception as ex:
-			raise ChildProcessError(f'Unable to execute "robocopy /?"\n\t{type(ex)}: {ex}')
+		self._cmd = ['robocopy', src, dst]
+		if file:
+			self._cmd.append(Path(file))
+		else:
+			self._cmd.append('/e')
+		if parameters:
+			self._cmd.extend(parameters)
 
 	def __repr__(self):
 		'''Return command line as string'''
 		return ' '.join(f"'{item}'" if isinstance(item, Path) else f'{item}' for item in self._cmd)
 
-	def mk_cmd(self, src, dst, file=None):
-		'''Create command line for RoboCopy'''
-		self._cmd = [self.CMD, src, dst]
-		if file:
-			self._cmd.append(Path(file))
-		else:
-			self._cmd.append('/e')
-		self._cmd.extend(self._args)
-		return self.__repr__()
-
 	def popen(self):
 		'''Launch RoboCopy process'''
-		self.process = Popen(self._cmd,
+		super().__init__(self._cmd,
 			stdout = PIPE,
-			stderr = STDOUT,
+			stderr = PIPE,
 			encoding = 'utf-8',
 			errors = 'ignore',
 			universal_newlines = True,
 			startupinfo = self._startupinfo
 		)
-		return self.process
+		return self
 
-	def run(self):
+	def run(self, echo=print, kill=None):
 		'''Run RoboCopy and yield stdout'''
 		self.popen()
-		for line in self.process.stdout:
+		for line in self.stdout:
 			if stripped := line.strip():
-				yield stripped
-		self.returncode = self.process.wait()
+				if stripped.endswith('%'):
+					echo(stripped, end='\r')
+				else:
+					echo(stripped)
+			if kill and kill.is_set():
+				self.terminate()
+				raise SystemExit('Kill signal')
+		returncode = self.wait()
+		if returncode >= 8:
+			raise ChildProcessError(f'Robocopy returncode: {returncode}')
+		return returncode
 
 class FileHash:
 	'''Calculate hashes of files'''

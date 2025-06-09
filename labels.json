@@ -60,6 +60,8 @@
     "starting_simulation": "Starting simulation of copy process",
     "existing": "Already exists!",
     "collisions": "# file(s) with the same name exist in the destination and could be overwritten",
+
+    "aborting_by_user": "Aborting by user",
     "simulation_finished": "The simulation of the copy process is complete",
     "simulation_aborted": "The simulation of the copy process was aborted",
     "starting_hashing": "Starting hash value calculation",

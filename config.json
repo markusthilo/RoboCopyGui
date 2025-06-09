@@ -1,1 +1,48 @@
-{"initial_dir": "C:/Users/user/Documents", "log_dir": "C:\\Users\\user\\Documents", "log_name": "%y%m%d_%H%M%S_robolog.txt", "tsv_name": "%y%m%d_%H%M%S_robofiles.csv", "robocopy_parameters": {"/copyall": ["/nocopy"], "/nocopy": ["/copyall"]}, "options": ["/copyall"], "hashes": ["md5", "sha256"], "verify": "size"}
+{
+    "initial_dir": "C:/Users/user/Documents",
+    "log_dir": "C:\\Users\\user\\Documents",
+    "log_name": "%y%m%d_%H%M%S_robolog.txt",
+    "tsv_name": "%y%m%d_%H%M%S_robofiles.csv",
+    "robocopy_base_parameters": [
+        "/fp",
+        "/ns",
+        "/njh",
+        "/njs",
+        "/nc",
+        "/unicode",
+        "/r:0",
+        "/w:0",
+        "/im",
+        "/is"
+    ],
+    "robocopy_parameters": {
+        "/compress": [],
+        "/copyall": [
+            "/nocopy"
+        ],
+        "/nocopy": [
+            "/copyall"
+        ],
+        "/mir": [
+            "/purge"
+        ],
+        "/purge": [
+            "/mir"
+        ],
+        "/z": [
+            "/zb"
+        ],
+        "/zb": [
+            "/z"
+        ]
+    },
+    "options": [
+        "/compress",
+        "/z"
+    ],
+    "hashes": [
+        "md5",
+        "sha256"
+    ],
+    "verify": "size"
+}
