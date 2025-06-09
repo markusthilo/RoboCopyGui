@@ -6,9 +6,7 @@ from sys import executable as __executable__
 from pathlib import Path
 from time import strftime, sleep, perf_counter
 from datetime import timedelta
-from lib.robocopy import RoboCopy
-from lib.hashes import HashThread, FileHash
-from lib.size import Size
+from classes_robo import RoboCopy, HashThread, FileHash, Size
 
 class Copy:
 	'''Copy files using RoboCopy'''

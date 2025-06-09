@@ -12,16 +12,18 @@ from pathlib import Path
 from tkinter import Toplevel
 from tkinter.font import nametofont
 from tkinter.ttk import Frame, Button, Treeview, Scrollbar
+from os import name as __osname__
 try:
 	from wmi import WMI
-	__winsystem__ = True
 except:
-	__winsystem__ = False
+	pass
+__winsystem__ = __osname__ == 'nt'
 
 class AskPathsWindow(Toplevel):
 	'''Filedialog to choose multiple existing directory and file paths'''
 
-	def __init__(self, parent,
+	def __init__(self,
+			parent = None,
 			title = None,
 			confirm = None,
 			cancel = None,
@@ -39,26 +41,32 @@ class AskPathsWindow(Toplevel):
 						to select, something else or None if both are OK (default)
 		multiple:		bool: True if more than one item to select (default is True)
 		initialdir:		pathlib.Path/None: directory to focus on open (default is home directory)
+
+		self.selected is a resulting lists of pathlib .Path objects
 		'''
 		self.selected = list()
+		self._root_paths = list()
 		if __winsystem__:	# on windows multiple root paths / logical drives are possible
-			self._conn = WMI()
-			self._root_paths = list()
-			for volume in self._conn.Win32_LogicalDisk():
-				path = Path(f'{volume.DeviceID}\\')
-				if path.is_dir():
-					self._root_paths.append(path)
-		else:
-			self._root_paths = [Path('/')]
-		if not title:
-			title = ['Select']
-			if restriction == 'dir':
-				title += 'directories' if multiple else 'directory'
-			elif restriction == 'file':
-				title += 'files' if multiple else 'file'
-			else:
-				title += 'directories and files' if multiple else 'directory and file'
+			try:
+				self._conn = WMI()
+				for volume in self._conn.Win32_LogicalDisk():
+					path = Path(f'{volume.DeviceID}\\')
+					if path.is_dir():
+						self._root_paths.append(path)
+			except:
+				pass
+		if not self._root_paths:
+			self._root_paths = [Path(Path.home().anchor)]
 		self._restriction = restriction if restriction in ('dir', 'file') else None
+		self._multiple = False if multiple is False else True
+		if not title:
+			title = 'Select '
+			if self._restriction == 'dir':
+				title += 'directories' if self._multiple else 'directory'
+			elif self._restriction == 'file':
+				title += 'files' if self._multiple else 'file'
+			else:
+				title += 'directories and files' if self._multiple else 'directory and file'
 		self._focus_path = Path(initialdir).absolute() if initialdir else Path.home()
 		self._focus_path = self._focus_path if self._focus_path.exists() else Path.home()
 		super().__init__()	### tkinter windows configuration ###
@@ -156,12 +164,11 @@ class AskPathsWindow(Toplevel):
 	def _accepted_path(self, item):
 		'''Check if path is ok'''
 		path = item if isinstance(item, Path) else Path(item)
-		if self._restriction == 'dir' and path.is_dir():
-			return path
-		elif self._restriction == 'file' and path.is_file():
-			return path
-		elif not self._restriction:
-			return path
+		if self._restriction == 'dir':
+			return path if path.is_dir() else None
+		elif self._restriction == 'file':
+			return path if path.is_file() else None
+		return path if path.exists() else None
 
 	def _filter_to_path(self, items):
 		'''Filter items and yield path thar are OK'''
@@ -181,7 +188,6 @@ class AskPathsWindow(Toplevel):
 
 	def _select(self, dummy):
 		'''Select button event'''
-		print(self._tree.focus())
 		if path := self._accepted_path(self._tree.focus()):
 			self._tree.selection_add(path)
 		self._confirm()
@@ -193,9 +199,11 @@ class AskPathsWindow(Toplevel):
 
 	def _select_all(self, dummy):
 		'''Select all button event'''
+		if not self._multiple:
+			return
 		if item := self._tree.focus():
 			try:
-				self._tree.selection_add(self._filter_to_path(Path(item).parent.iterdir()))
+				self._tree.selection_add(list(self._filter_to_path(Path(item).parent.iterdir())))
 			except:
 				return
 
@@ -203,13 +211,17 @@ class AskPathsWindow(Toplevel):
 		'''Deselect all button event'''
 		self._tree.selection_set()
 
+	def get(self):
+		'''Return selected paths as list'''
+		return self.selected
+
 def askpaths(title=None, confirm=None, cancel=None, restriction=None, multiple=True, initialdir=None):
 	'''Function layer for AskPathsWindow'''
-	window = AskPathsWindow(None,
+	window = AskPathsWindow(
 		title = title,
 		confirm = confirm,
-		restriction = None,
-		multiple = True,
+		restriction = restriction,
+		multiple = multiple,
 		cancel = cancel,
 		initialdir = initialdir
 	)

@@ -17,7 +17,7 @@
     "size": "Size",
     "log": "Log",
     "log_tip": "Select the directory for logging and possibly CSV file.\nIf the entry is left empty, no log will be created (except\nlastlog.txt in the application directory). The field can also\nbe filled directly (e.g. Ctrl+V).",
-    "admin": "\u2713 Runnung as Administrator",
+    "admin": "\u269C Runnung as Administrator",
     "admin_tip": "The application is running as administrator.\nBe careful where you copy stuff.",
     "no_admin": "\u26A0 No Administrator Rights",
     "no_admin_tip": "You have no administrator privileges.\nSome options might not work and/or\nrestrivted areas might be unaccessable.",
@@ -45,13 +45,14 @@
     "src_path_not_found": "Source path # was not found.",
     "no_source": "Source directories and/or files were not selected.",
     "already_added": "# has already been added.",
-    "no_destination": "Destination directory was not selected.",
     "dst_no_dir": "Destination # is not a directory.",
     "dst_not_empty": "Destination directory # is not empty,\nfiles could be overwritten.\nContinue anyway?",
     "problems": "Problems occurred.",
     "invalid_dst_path": "Destination directory # is invalid.",
     "invalid_log_path": "Log directory # is invalid.",
     "log_required": "A log directory is required.",
+    "config_error": "Anable to save configuration, unable to start Robocopy",
+    "no_destination": "Path to destination directory is missing",
     "invalid_path": "Path # is invalid.",
     "reading_source": "Reading structure of files and directories to be copied",
     "done_reading": "Reading completed",
@@ -77,5 +78,7 @@
     "hash_check_finished": "Verification based on hash value (#) is complete",
     "copy_finished": "Done - copying took # (hours, minutes, seconds)",
     "mismatches": "There were # mismatch(es)",
-    "running_warning": "Copy process is running!\nDo you want to abort the copy process and exit the application?"
+    "abort_warning": "Robocopy is running!\nDo you want to abort?",
+    "cancel_shutdown": "Cancel shutdown",
+    "warnings_occured": "Warnings occured, you might want to check the log"
 }

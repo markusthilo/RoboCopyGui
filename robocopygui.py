@@ -12,9 +12,9 @@ __description__ = 'Graphical user interface for RoboCopy with hash and verify op
 from sys import executable as __executable__
 from pathlib import Path
 from threading import Thread, Event
-#from ctypes import windll
+from ctypes import windll
 from subprocess import run
-from tkinter import Tk, PhotoImage, StringVar, BooleanVar, Checkbutton
+from tkinter import Tk, PhotoImage, StringVar, BooleanVar, Checkbutton, Toplevel
 from tkinter.font import nametofont
 from tkinter.ttk import Frame, Label, Entry, Button, Combobox
 from tkinter.ttk import Scrollbar, Spinbox, Progressbar
@@ -22,7 +22,7 @@ from tkinter.scrolledtext import ScrolledText
 from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
-#from worker import Copy
+from worker import Copy
 from classes_robo import Config, FileHash
 from tk_pathdialog import askpaths
 
@@ -31,12 +31,12 @@ __parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python'
 class WorkThread(Thread):
 	'''The worker has tu run as thread not to freeze GUI/Tk'''
 
-	def __init__(self, target_id, echo, finish):
+	def __init__(self, src_paths, dst_path, simulate, echo, finish):
 		'''Pass arguments to worker'''
 		super().__init__()
 		self._finish = finish
 		self._kill_event = Event()
-		self._worker = Copy(src_paths, dst_path, echo=echo, kill=self._kill_event, finish=self._finish)
+		#self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
 
 	def kill(self):
 		'''Kill thread'''
@@ -48,6 +48,8 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run thread'''
+		self._finish(None)	### DEBUG
+		'''
 		try:
 			returncode = self._worker.run()
 		except Exception as ex:
@@ -55,6 +57,7 @@ class WorkThread(Thread):
 		if self.kill_is_set():
 			returncode = 'killed'
 		self._finish(returncode)
+		'''
 
 class Gui(Tk):
 	'''GUI look and feel'''
@@ -67,6 +70,7 @@ class Gui(Tk):
 		self._config = Config(__parent_path__ / 'config.json')
 		self._config.application = __application__
 		self._config.version = __version__
+		self._admin_rights = windll.shell32.IsUserAnAdmin() != 0
 		self._work_thread = None
 		self.title(f'{__application__} v{__version__}')	### define the gui ###
 		for row, weight in enumerate(self._defs.row_weights):
@@ -90,12 +94,15 @@ class Gui(Tk):
 		self._source_files_button = Button(frame, text=self._labels.files, command=self._select_source_files)	# souce file button
 		self._source_files_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_files_button, self._labels.source_files_tip)
-
 		self._source_multiple_button = Button(frame, text=self._labels.multiple, command=self._select_multiple)	# multiple button #
 		self._source_multiple_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_multiple_button, self._labels.source_multiple_tip)
-
-		self._source_text = ScrolledText(self, font=(self._font['family'], self._font['size']), padx=self._pad, pady=self._pad) # source field
+		self._source_text = ScrolledText(self, # source field
+			font = (self._font['family'], self._font['size']),
+			wrap = "none",
+			padx = self._pad,
+			pady = self._pad
+		)
 		self._source_text.grid(row=0, column=1, columnspan=3, sticky='nswe', ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
 		Hovertip(self._source_text, self._labels.source_text_tip)
 		self._destination_button = Button(self, text=self._labels.destination, command=self._select_destination)	### destination selector
@@ -126,7 +133,7 @@ class Gui(Tk):
 		self._log_entry = Entry(self, textvariable=self._log)
 		self._log_entry.grid(row=3, column=1, columnspan=3, sticky='nswe', padx=self._pad, pady=self._pad)
 		Hovertip(self._log_button, self._labels.log_tip)
-		if False:# windll.shell32.IsUserAnAdmin() == 1:	### DEBUG ### ### admin label ###
+		if self._admin_rights:	### admin label ###
 			text = self._labels.admin
 			tip = self._labels.admin_tip
 		else:
@@ -144,7 +151,7 @@ class Gui(Tk):
 		Hovertip(self._exec_button, self._labels.exec_tip)
 		self._info_text = ScrolledText(self, font=(self._font['family'], self._font['size']), padx=self._pad, pady=self._pad) ### info ###
 		self._info_text.grid(row=5, column=1, columnspan=3, sticky='nswe',
-			ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=self._pad)
+			ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=(0, self._pad))
 		self._info_text.bind('<Key>', lambda dummy: 'break')
 		self._info_text.configure(state='disabled')
 		self._info_fg = self._info_text.cget('foreground')
@@ -154,17 +161,18 @@ class Gui(Tk):
 		self._info_label.grid(row=6, column=1, sticky='nswe', padx=self._pad, pady=(0, self._pad))
 		self._label_fg = self._info_label.cget('foreground')
 		self._label_bg = self._info_label.cget('background')
-		self._shutdown = BooleanVar(value=False)	### shutdown after finish
-		frame = Frame(self)
-		frame.grid(row=6, column=2, sticky='nswe', pady=(0, self._pad))
-		label = Label(frame, text=f'{self._labels.shutdown}:')
-		label.pack(side='left', padx=(self._pad, 0))
-		self._shutdown_button = Checkbutton(frame, variable=self._shutdown, command=self._toggle_shutdown)
-		self._shutdown_button.pack(side='right', padx=(0, self._pad))
-		Hovertip(frame, self._labels.shutdown_tip)
-		Hovertip(label, self._labels.shutdown_tip)
+		if self._admin_rights:	### shutdown after finish
+			self._shutdown = BooleanVar(value=False)
+			frame = Frame(self)
+			frame.grid(row=6, column=2, sticky='nswe', pady=(0, self._pad))
+			label = Label(frame, text=f'{self._labels.shutdown}:')
+			label.pack(side='left', padx=(self._pad, 0))
+			self._shutdown_button = Checkbutton(frame, variable=self._shutdown, command=self._toggle_shutdown)
+			self._shutdown_button.pack(side='right', padx=(0, self._pad), pady=(0, self._pad))
+			Hovertip(frame, self._labels.shutdown_tip)
+			Hovertip(label, self._labels.shutdown_tip)
 		self._quit_button = Button(self, text=self._labels.quit, command=self._quit_app)	### quit/abort ###
-		self._quit_button.grid(row=6, column=3, sticky='nswe', padx=self._pad, pady=self._pad)
+		self._quit_button.grid(row=6, column=3, sticky='nse', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._quit_button, self._labels.quit_tip)
 		self._init_warning()
 
@@ -185,7 +193,7 @@ class Gui(Tk):
 
 	def _select_source_dir(self):
 		'''Select directory to add into field'''
-		if directory := askdirectory(title=self._labels.select_dir, mustexist=True):
+		if directory := askdirectory(title=self._labels.select_dir, mustexist=True, initialdir=self._config.initial_dir):
 			path = Path(directory).absolute()
 			if path in self._read_source_paths():
 				showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
@@ -194,7 +202,7 @@ class Gui(Tk):
 
 	def _select_source_files(self):
 		'''Select file(s) to add into field'''
-		if filenames := askopenfilenames(title=self._labels.select_files):
+		if filenames := askopenfilenames(title=self._labels.select_files, initialdir=self._config.initial_dir):
 			print(filenames, type(filenames), len(filenames))
 			if len(filenames) == 1:
 				path = Path(filenames[0]).absolute()
@@ -212,7 +220,7 @@ class Gui(Tk):
 			title = self._labels.select_multiple,
 			confirm = self._labels.confirm,
 			cancel = self._labels.cancel,
-			initialdir = self._config.last_dir
+			initialdir = self._config.initial_dir
 		):
 			for path in paths:
 				if not path in self._read_source_paths():
@@ -322,7 +330,7 @@ class Gui(Tk):
 
 	def _select_log(self):
 		'''Select directory '''
-		if directory := askdirectory(title=self._labels.select_log, mustexist=False):
+		if directory := askdirectory(title=self._labels.select_log, mustexist=False, initialdir=self._config.log_dir):
 			self._log.set(directory)
 			self._config.log_dir = directory
 
@@ -334,9 +342,9 @@ class Gui(Tk):
 		self._info_text.configure(foreground=self._info_fg, background=self._info_bg)
 		self._warning_state = 'stop'
 
-	def _mk_log_dir(self, log_dir):
+	def _get_log_dir(self):
 		'''Create log directory if not exists'''
-		if log_dir:
+		if log_dir:= self._log_entry.get():
 			try:
 				log_dir_path = Path(log_dir).absolute()
 				log_dir_path.mkdir(parents=True, exist_ok=True)
@@ -351,31 +359,18 @@ class Gui(Tk):
 
 	def _start_worker(self, src_paths, dst_path, simulate):
 		'''Disable source selection and start worker'''
-		log_dir_path = self._mk_log_dir(self._log_entry.get())
-		if not log_dir_path and self._config.hashes and not simulate:
-			self._select_log()
-			if not self._config.log_dir:
-				showerror(title=self._labels.warning, message=self._labels.log_required)
-				return
-			log_dir_path = self._mk_log_dir(self._log_entry.get())
-			if not log_dir_path:
-				return
-		self._config.log_dir = log_dir_path
 		try:
 			self._config.save()
 		except:
-			pass
+			showerror(title=self._labels.warning, message=self._labels.config_error)
+			return
+		if not simulate:
+			self._simulate_button.configure(state='disabled')
 		self._exec_button.configure(state='disabled')
 		self._clear_info()
 		self._work_thread = WorkThread(
 			src_paths,
 			dst_path,
-			self._app_path,
-			self._labels,
-			log_dir_path / strftime(self._config.tsv_name) if log_dir_path else None,
-			log_dir_path / strftime(self._config.log_name) if log_dir_path else None,
-			self._config.hashes,
-			self._config.verify,
 			simulate,
 			self.echo,
 			self.finished
@@ -384,16 +379,14 @@ class Gui(Tk):
 
 	def _simulate(self):
 		'''Run simulation'''
+		if self._work_thread:
+			self._work_thread.kill()
 		src_paths = self._get_source_paths()
 		if not src_paths:
 			return
 		dst_path = self._get_destination_path()
 		if not dst_path:
 			return
-		if self._work_thread:
-			self._simulate_button_text.set(self._labels.simulate_button)
-			self._work_thread.kill()
-			self._work_thread = None
 		else:
 			self._simulate_button_text.set(self._labels.stop_button)
 			self._start_worker(src_paths, dst_path, True)
@@ -414,8 +407,15 @@ class Gui(Tk):
 				message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
 			)
 			return
-		self._simulate_button.configure(state='disabled')
-		self._exec_button.configure(state='disabled')
+		log_dir_path = self._get_log_dir()
+		if not log_dir_path and self._config.hashes and not simulate:
+			self._select_log()
+			if not self._config.log_dir:
+				showerror(title=self._labels.warning, message=self._labels.log_required)
+				return
+			log_dir_path = self._get_log_dir()
+			if not log_dir_path:
+				return
 		self._start_worker(
 			src_paths,
 			dst_path,
@@ -452,7 +452,6 @@ class Gui(Tk):
 
 	def _reset(self):
 		'''Run this when worker has finished copy process'''
-		self._work_thread = None
 		self._simulate_button_text.set(self._labels.simulate_button)
 		self._simulate_button.configure(state='normal')
 		self._exec_button.configure(state='normal')
@@ -468,19 +467,11 @@ class Gui(Tk):
 				if askokcancel(title=self._labels.warning, message=self._labels.abort_warning):
 					self._work_thread.kill() # kill running work thread
 				return
-		#self._get_value()
-		#self._get_blocksize()
-		#self._get_maxbadblocks()
-		#self._get_maxretries()
-		#self._get_create()
-		#self._get_fs()
-		#self._get_label()
 		try:
 			self._config.save()
 		except:
 			pass
 		self.destroy()
-
 
 	def _delay_shutdown(self):
 		'''Delay shutdown and update progress bar'''
@@ -490,6 +481,36 @@ class Gui(Tk):
 			self._shutdown_window.after(1000, self._delay_shutdown)
 		else:
 			run(['shutdown', '/s'])
+
+	def _shutdown_dialog(self):
+		'''Show shutdown dialog'''
+		self._shutdown_window = Toplevel(self)
+		self._shutdown_window.title(self._labels.warning)
+		self._shutdown_window.transient(self)
+		self._shutdown_window.focus_set()
+		self._shutdown_window.resizable(False, False)
+		self._shutdown_window.grab_set()
+		frame = Frame(self._shutdown_window, padding=self._pad)
+		frame.pack(fill='both', expand=True)
+		Label(frame,
+			text = '\u26A0',
+			font = (self._font['family'], self._font['size'] * self._defs.symbol_factor),
+			foreground = self._defs.symbol_fg,
+			background = self._defs.symbol_bg
+		).pack(side='left', padx=self._pad, pady=self._pad)
+		Label(frame, text=self._labels.shutdown_question, anchor='s').pack(
+			side='right', fill='both', padx=self._pad, pady=self._pad
+		)
+		frame = Frame(self._shutdown_window, padding=self._pad)
+		frame.pack(fill='both', expand=True)
+		self._delay_progressbar = Progressbar(frame, mode='determinate', maximum=self._defs.shutdown_delay)
+		self._delay_progressbar.pack(side='top', fill='x', padx=self._pad, pady=self._pad)
+		cancel_button = Button(frame, text=self._labels.cancel_shutdown, command=self._shutdown_window.destroy)
+		cancel_button.pack(side='bottom', fill='both', padx=self._pad, pady=self._pad)
+		self.update_idletasks()
+		self._shutdown_cnt = 0
+		self._delay_shutdown()
+		self._shutdown_window.wait_window(self._shutdown_window)
 
 	def echo(self, *args, end=None):
 		'''Write message to info field (ScrolledText)'''
@@ -508,35 +529,8 @@ class Gui(Tk):
 		if returncode == 'killed':
 			self._reset()
 			return
-		if self._shutdown.get():	### Shutdown dialog ###
-			self._shutdown_window = Toplevel(self)
-			self._shutdown_window.title(self._labels.warning)
-			self._shutdown_window.transient(self)
-			self._shutdown_window.resizable(False, False)
-			self._shutdown_window.grab_set()
-			frame = Frame(self._shutdown_window, padding=self._pad)
-			frame.pack(fill='both', expand=True)
-			Label(frame,
-				text = '\u26A0',
-				font = (self._font['family'], self._font['size'] * self._defs.symbol_factor),
-				foreground = self._defs.symbol_fg,
-				background = self._defs.symbol_bg
-			).pack(side='left', padx=self._pad, pady=self._pad)
-			Label(frame, text=self._labels.shutdown_question, anchor='s').pack(
-				side='right', fill='both', padx=self._pad, pady=self._pad
-			)
-			frame = Frame(self._shutdown_window, padding=self._pad)
-			frame.pack(fill='both', expand=True)
-			self._delay_progressbar = Progressbar(frame, mode='determinate', maximum=self._defs.shutdown_delay)
-			self._delay_progressbar.pack(side='top', fill='x', padx=self._pad, pady=self._pad)
-			cancel_button = Button(frame, text=self._labels.cancel_shutdown, command=self._shutdown_window.destroy)
-			cancel_button.pack(side='bottom', fill='both', padx=self._pad, pady=self._pad)
-			self.update_idletasks()
-			pos_x = self.winfo_rootx() + (self.winfo_width() // 2)
-			pos_y = self.winfo_rooty() + (self.winfo_height() // 2)
-			self._shutdown_window.geometry(f'+{pos_x}+{pos_y}')
-			self._shutdown_cnt = 0
-			self._delay_shutdown()
+		if self._admin_rights and self._shutdown.get():	### Shutdown dialog ###
+			self._shutdown_dialog()
 		if isinstance(returncode, Exception):
 			self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
 			self._warning_state = 'enable'
