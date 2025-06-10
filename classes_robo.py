@@ -58,11 +58,18 @@ class Size(int):
 class RoboCopy(Popen):
 	'''Wrapper for RoboCopy'''
 
-	def __init__(self, src, dst, file=None, parameters=None):
+	def __init__(self, src=None, dst=None, file=None, parameters=None):
 		'''Prepare RoboCopy'''
 		self._startupinfo = STARTUPINFO()
 		self._startupinfo.dwFlags |= STARTF_USESHOWWINDOW
-		self._cmd = ['robocopy', src, dst]
+		self._cmd = ['robocopy']
+		if parameters in ('help', '/?', 'h', '?'):
+			self._cmd.append('/?')
+			return
+		if src:
+			self._cmd.append(src)
+		if dst:
+			self._cmd.append(dst)
 		if file:
 			self._cmd.append(Path(file))
 		else:
@@ -98,10 +105,7 @@ class RoboCopy(Popen):
 			if kill and kill.is_set():
 				self.terminate()
 				raise SystemExit('Kill signal')
-		returncode = self.wait()
-		if returncode >= 8:
-			raise ChildProcessError(f'Robocopy returncode: {returncode}')
-		return returncode
+		return self.wait()
 
 class FileHash:
 	'''Calculate hashes of files'''

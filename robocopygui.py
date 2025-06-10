@@ -23,8 +23,9 @@ from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
 from worker import Copy
-from classes_robo import Config, FileHash
+from classes_robo import Config, FileHash, RoboCopy
 from tk_pathdialog import askpaths
+from tkinter.messagebox import showinfo
 
 __parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python' else Path(__executable__).parent
 
@@ -36,7 +37,7 @@ class WorkThread(Thread):
 		super().__init__()
 		self._finish = finish
 		self._kill_event = Event()
-		self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
+		#self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
 
 	def kill(self):
 		'''Kill thread'''
@@ -48,12 +49,16 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run thread'''
-		try:
-			returncode = self._worker.run()
-		except Exception as ex:
-			returncode = ex
-		if self.kill_is_set():
-			returncode = 'killed'
+		from time import sleep	### DEBUG ###
+		print('Runnung dummy...')
+		sleep(5)
+		print('Finish!')
+		self._finish(None)
+		return	#############################
+		#try:
+		returncode = self._worker.run()
+		#except Exception as ex:
+		#	returncode = ex
 		self._finish(returncode)
 
 class Gui(Tk):
@@ -139,13 +144,16 @@ class Gui(Tk):
 		self._admin_label = Label(self, text=text)
 		self._admin_label.grid(row=4, column=1, sticky='nswe', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._admin_label, tip)
-		self._simulate_button_text = StringVar(value=self._labels.simulate_button)	### simulate ###
+		self._simulate_button_text = StringVar(value=self._labels.simulate)	### simulate ###
 		self._simulate_button = Button(self, textvariable=self._simulate_button_text, command=self._simulate)
 		self._simulate_button.grid(row=4, column=2, sticky='nswe', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._simulate_button, self._labels.simulate_tip)
 		self._exec_button = Button(self, text=self._labels.exec_button, command=self._execute)	### execute ###
 		self._exec_button.grid(row=4, column=3, sticky='nswe', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._exec_button, self._labels.exec_tip)
+		self._help_button = Button(self, text=self._labels.help, command=self._echo_help)	### help ###
+		self._help_button.grid(row=5, column=0, sticky='nwe', padx=self._pad, pady=self._pad)
+		Hovertip(self._help_button, self._labels.help_tip)
 		self._info_text = ScrolledText(self, font=(self._font['family'], self._font['size']), padx=self._pad, pady=self._pad) ### info ###
 		self._info_text.grid(row=5, column=1, columnspan=3, sticky='nswe',
 			ipadx=self._pad, ipady=self._pad, padx=self._pad, pady=(0, self._pad))
@@ -168,7 +176,8 @@ class Gui(Tk):
 			self._shutdown_button.pack(side='right', padx=(0, self._pad), pady=(0, self._pad))
 			Hovertip(frame, self._labels.shutdown_tip)
 			Hovertip(label, self._labels.shutdown_tip)
-		self._quit_button = Button(self, text=self._labels.quit, command=self._quit_app)	### quit/abort ###
+		self._quit_button_text = StringVar(value=self._labels.quit)
+		self._quit_button = Button(self, textvariable=self._quit_button_text, command=self._quit_app)	### quit/abort ###
 		self._quit_button.grid(row=6, column=3, sticky='nse', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._quit_button, self._labels.quit_tip)
 		self._init_warning()
@@ -242,28 +251,98 @@ class Gui(Tk):
 		if dst_dir := askdirectory(title=self._labels.select_destination, mustexist=False):
 			self._destination.set(dst_dir)
 	
-	def _get_destination_path(self):
+	def _get_destination_path(self, src_paths):
 		'''Get destination directory'''
 		dst_dir = self._destination.get()
 		if not dst_dir:
-			showerror(title=self._labels.error, message=self._labels.no_destination)
+			self._select_destination()
+			dst_dir = self._destination.get()
+			if not dst_dir:
+				showerror(title=self._labels.error, message=self._labels.no_destination)
+				return
+		try:
+			dst_path = Path(dst_dir).absolute()
+		except:
+			showerror(title=self._labels.error, message=self._labels.invalid_destination.replace('#', f'{dst_dir}'))
 			return
-		dst_path = Path(dst_dir).absolute()
-		if not dst_path.exists():
-			return dst_path
-		if not dst_path.is_dir():
+		
+		for path in src_paths:
+			print('-', path.parents, '/', path)
+
+
+
+		if dst_path.exists():
+			if dst_path.is_dir():
+				return dst_path
 			showerror(self._labels.error, self._labels.dst_no_dir.replace('#', f'{dst_path}'))
 			return
-		top = dst_path.samefile(dst_path.parent)
-		for path in dst_path.iterdir():
-			if top and path.is_dir() and path.name.upper() in ('$RECYCLE.BIN', 'SYSTEM VOLUME INFORMATION'):
-				continue
-			if askyesno(self._labels.warning, self._labels.dst_not_empty.replace('#', f'{dst_path}')):
-				break
-			else:
-				return
 		return dst_path
 
+	def _mk_destination_path(self, dst_path):
+		'''Make destination directory'''
+		if dst_path.exists():
+			top = dst_path.samefile(dst_path.parent)
+			for path in dst_path.iterdir():
+				if top and path.is_dir() and path.name.upper() in ('$RECYCLE.BIN', 'SYSTEM VOLUME INFORMATION'):
+					continue
+				if askyesno(self._labels.warning, self._labels.dst_not_empty.replace('#', f'{dst_path}')):
+					return
+				else:
+					return True
+			return
+		try:
+			dst_path.mkdir(parents=True)
+		except Exception as ex:
+			showerror(
+				title = self._labels.error,
+				message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
+			)
+			return True
+
+	def _select_log(self):
+		'''Select directory '''
+		if directory := askdirectory(title=self._labels.select_log, mustexist=False, initialdir=self._config.log_dir):
+			self._log.set(directory)
+			self._config.log_dir = directory
+
+	def _get_log_dir(self):
+		'''Get log directory'''
+		if log_dir := self._log.get():
+			try:
+				self._config.log_dir = f'{Path(log_dir).absolute()}'
+			except:
+				return
+		else:
+			self._config.log_dir = ''
+
+	def _mk_log_dir(self):
+		'''Create log directory if not exists'''
+		if log_dir := self._log_entry.get():
+			try:
+				self._config.log_dir = f'{Path(log_dir).absolute()}'
+			except Exception as ex:
+				showerror(
+					title = self._labels.error,
+					message = f'{self._labels.invalid_log_path.replace("#", f"{log_dir_path}")}\n{type(ex)}: {ex}'
+				)
+				self._config.log_dir = ''
+		else:
+			self._config.log_dir = ''
+		if not self._config.log_dir and self._config.hashes:
+			self._select_log()
+			if not self._config.log_dir:
+				showerror(title=self._labels.error, message=self._labels.log_required)
+				return True
+		if self._config.log_dir:
+			try:
+				Path(log_dir).mkdir(parents=True, exist_ok=True)
+			except Exception as ex:
+				showerror(
+					title = self._labels.error,
+					message = f'{self._labels.invalid_log_path.replace("#", self._config.log_dir)}\n{type(ex)}: {ex}'
+				)
+				return True
+			
 	def _gen_options_list(self):
 		'''Generate list of options'''
 		return [
@@ -328,12 +407,6 @@ class Gui(Tk):
 			self._config.verify = choosen
 		self._verify_selector['values'] = self._gen_verify_list()
 
-	def _select_log(self):
-		'''Select directory '''
-		if directory := askdirectory(title=self._labels.select_log, mustexist=False, initialdir=self._config.log_dir):
-			self._log.set(directory)
-			self._config.log_dir = directory
-
 	def _clear_info(self):
 		'''Clear info text'''
 		self._info_text.configure(state='normal')
@@ -342,32 +415,23 @@ class Gui(Tk):
 		self._info_text.configure(foreground=self._info_fg, background=self._info_bg)
 		self._warning_state = 'stop'
 
-	def _get_log_dir(self):
-		'''Create log directory if not exists'''
-		if log_dir:= self._log_entry.get():
-			try:
-				log_dir_path = Path(log_dir).absolute()
-				log_dir_path.mkdir(parents=True, exist_ok=True)
-				self._config.log_dir = f'{log_dir_path}'
-			except Exception as ex:
-				showerror(
-					title = self._labels.warning,
-					message = f'{self._labels.invalid_log_path.replace("#", f"{log_dir_path}")}\n{type(ex)}: {ex}'
-				)
-				return
-			return log_dir_path
-
 	def _start_worker(self, src_paths, dst_path, simulate):
 		'''Disable source selection and start worker'''
+		if self._mk_log_dir():
+			return
 		try:
 			self._config.save()
 		except:
 			showerror(title=self._labels.warning, message=self._labels.config_error)
 			return
-		if not simulate:
-			self._simulate_button.configure(state='disabled')
 		self._exec_button.configure(state='disabled')
+		self._warning_state = 'disabled'
 		self._clear_info()
+		self._quit_button_text.set(self._labels.abort)
+		if simulate:
+			self._simulate_button_text.set(self._labels.abort)
+		else:
+			self._simulate_button.configure(state='disabled')
 		self._work_thread = WorkThread(
 			src_paths,
 			dst_path,
@@ -381,46 +445,34 @@ class Gui(Tk):
 		'''Run simulation'''
 		if self._work_thread:
 			self._work_thread.kill()
+			return
 		src_paths = self._get_source_paths()
 		if not src_paths:
 			return
-		dst_path = self._get_destination_path()
+		dst_path = self._get_destination_path(src_paths)
 		if not dst_path:
 			return
-		else:
-			self._simulate_button_text.set(self._labels.stop_button)
-			self._start_worker(src_paths, dst_path, True)
+		self._start_worker(src_paths, dst_path, True)
 
 	def _execute(self):
 		'''Start copy process / worker'''
+		if self._work_thread:
+			return
 		src_paths = self._get_source_paths()
 		if not src_paths:
 			return
-		dst_path = self._get_destination_path()
+		dst_path = self._get_destination_path(src_paths)
 		if not dst_path:
 			return
-		try:
-			dst_path.mkdir(exist_ok=True)
-		except Exception as ex:
-			showerror(
-				title = self._labels.warning,
-				message = f'{self._labels.invalid_dst_path.replace("#", dst_dir)}\n{type(ex): {ex}}'
-			)
+		if self._mk_destination_path(dst_path):
 			return
-		log_dir_path = self._get_log_dir()
-		if not log_dir_path and self._config.hashes and not simulate:
-			self._select_log()
-			if not self._config.log_dir:
-				showerror(title=self._labels.warning, message=self._labels.log_required)
-				return
-			log_dir_path = self._get_log_dir()
-			if not log_dir_path:
-				return
-		self._start_worker(
-			src_paths,
-			dst_path,
-			False
-		)
+		self._start_worker(src_paths, dst_path, False)
+
+	def _echo_help(self):
+		'''Show RoboCopy help'''
+		for line in RoboCopy(parameters='/?').popen().stdout:
+			self.echo(line.strip())
+		self.echo(self._labels.help_text)
 
 	def _init_warning(self):
 		'''Init warning functionality'''
@@ -452,10 +504,10 @@ class Gui(Tk):
 
 	def _reset(self):
 		'''Run this when worker has finished copy process'''
-		self._simulate_button_text.set(self._labels.simulate_button)
+		self._simulate_button_text.set(self._labels.simulate)
 		self._simulate_button.configure(state='normal')
 		self._exec_button.configure(state='normal')
-		self._quit_button.configure(state='normal')
+		self._quit_button_text.set(self._labels.quit)
 		self._work_thread = None
 
 	def _quit_app(self):
@@ -467,6 +519,7 @@ class Gui(Tk):
 				if askokcancel(title=self._labels.warning, message=self._labels.abort_warning):
 					self._work_thread.kill() # kill running work thread
 				return
+		self._get_log_dir()
 		try:
 			self._config.save()
 		except:
@@ -526,7 +579,7 @@ class Gui(Tk):
 
 	def finished(self, returncode):
 		'''Run this when worker has finished copy process'''
-		if returncode == 'killed':
+		if isinstance(returncode, SystemExit):
 			self._reset()
 			return
 		if self._admin_rights and self._shutdown.get():	### Shutdown dialog ###
@@ -539,9 +592,10 @@ class Gui(Tk):
 				message = f'{self._labels.aborted_on_error}\n\n{type(returncode)}:\n{returncode}'
 			)
 		elif returncode:
-			self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
+			if isinstance(returncode, str):
+				showwarning(title=self._labels.warning, message=self._labels.process_returned.replace('#', returncode))
 		else:
-			showwarning(title=self._labels.warning, message=self._labels.warnings_occured)
+			self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
 		self._reset()
 
 if __name__ == '__main__':  # start here when run as application

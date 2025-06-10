@@ -17,12 +17,15 @@
     "size": "Size",
     "log": "Log",
     "log_tip": "Select the directory for logging and possibly CSV file.\nIf the entry is left empty, no log will be created (except\nlastlog.txt in the application directory). The field can also\nbe filled directly (e.g. Ctrl+V).",
+    "help": "Help",
+    "help_tip": "Show help text",
+    "help_text": "\n-------------------------------------------------------------------------------\nRobocopy GUI is a graphical user interface for the Windows Robocopy.exe.\n-------------------------------------------------------------------------------\nRobocopy is a command-line tool for copying files and directories.\nIt is part of the Windows operating system.\n\nThe GUI has tha additional option to calculate hashes and verify copied files (by hash or file size).\nYou can find the native help text above here in this filed (scroll!) to understand the options.\nOnly some are available in this GUI.\n\nThis is free and open source software (GPL-3).",
     "admin": "\u269C Runnung as Administrator",
     "admin_tip": "The application is running as administrator.\nBe careful where you copy stuff.",
     "no_admin": "\u26A0 No Administrator Rights",
     "no_admin_tip": "You have no administrator privileges.\nSome options might not work and/or\nrestrivted areas might be unaccessable.",
-    "simulate_button": "Simulate",
-    "stop_button": "Stop",
+    "simulate": "Simulate",
+    "abort": "Abort",
     "simulate_tip": "Shows which files would be created without actually copying.\nDuring the simulation, it can be aborted with this button.",
     "exec_button": "Start Copy Process",
     "exec_tip": "Start the recursive copy process. The\ndirectories and files to be copied are\nread from the field above.",
@@ -66,7 +69,7 @@
     "simulation_aborted": "The simulation of the copy process was aborted",
     "starting_hashing": "Starting hash value calculation",
     "executing": "Executing: #",
-    "robocopy_problem": "Robocopy had a problem, return value: #",
+    "robocopy_error": "Robocopy finished with returncode #",
     "robocopy_finished": "Robocopy has finished",
     "starting_size_verification": "Starting verification based on file size",
     "of_files": "of # files",
@@ -82,5 +85,5 @@
     "mismatches": "There were # mismatch(es)",
     "abort_warning": "Robocopy is running!\nDo you want to abort?",
     "cancel_shutdown": "Cancel shutdown",
-    "warnings_occured": "Warnings occured, you might want to check the log"
+    "process_returned": "Process returned: #"
 }

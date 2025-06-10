@@ -1,4 +1,0 @@
-2025-05-29 21:07:07 INFO: Lese Struktur der zu kopierenden Dateine und Verzeichnisse
-2025-05-29 21:07:08 INFO: Einlesen beendet: 884 Datei(en), 204 MiB / 214 MB
-2025-05-29 21:07:08 INFO: Starte Simulation des Kopiervorgangs
-2025-05-29 21:07:10 INFO: Das Simulieren des Kopiervorgangs ist beendet

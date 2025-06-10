@@ -79,6 +79,7 @@ class Copy:
 		total_bytes = Size(0)	# total size of all files to copy
 		for this_src_dir_path in src_dir_paths:
 			for path in this_src_dir_path.rglob('*'):
+				self._check_kill_signal()
 				if path.is_file():
 					size = path.stat().st_size
 					files.append((path, size, self._dst_path / path.relative_to(this_src_dir_path.parent)))
@@ -88,7 +89,95 @@ class Copy:
 			files.append((path, size, self._dst_path / path.name))
 			total_bytes += size
 		self._info(f'{self._labels.done_reading}: {len(files)} {self._labels.files}, {total_bytes}')
-		'''
+		if self._config.hashes:	### start hashing ###
+			self._info(self._labels.starting_hashing)
+			hash_thread = HashThread(files, algorithms=self._config.hashes)
+			hash_thread.start()
+		robo_parameters = self._config.robocopy_base_parameters	### robocopy parameters ###
+		robo_parameters.extend(self._config.options)
+		if self._simulate:	### add /l parameter for simulation
+			robo_parameters.append('/l')
+		for src_path in src_dir_paths:	### copy directories ###
+			dst_path = self._dst_path / src_path.name
+			robocopy = RoboCopy(src_path, dst_path, parameters=robo_parameters)
+			self._info(self._labels.executing.replace('#', f'{robocopy}'))
+			returncode = robocopy.run(echo=self._echo, kill=self._kill)
+			if returncode >= 8:
+				self._error(self._labels.robocopy_error.replace('#', f'{robocopy}'))
+		for src_path in src_file_paths:	### copy files ###
+			robocopy = RoboCopy(src_path.parent, self._dst_path, file=src_path.name, parameters=robo_parameters)
+			self._info(self._labels.executing.replace('#', f'{robocopy}'))
+			returncode = robocopy.run(echo=self._echo, kill=self._kill)
+			if returncode >= 8:
+				self._error(self._labels.robocopy_error.replace('#', f'{robocopy}'))
+		self._info(self._labels.robocopy_finished)
+		total_files = len(files)
+		mismatches = 0
+		bad_dst_file_paths = dict()
+		if self._config.verify == 'size' and not self._simulate:	### verify files by size ###
+			self._echo_file_progress(total_files, total_files)
+			self._info(self._labels.starting_size_verification)
+			for cnt, (src_path, src_size, dst_path) in enumerate(files, start=1):
+				self._echo_file_progress(total_files, cnt)
+				dst_size = dst_path.stat().st_size
+				if dst_size != src_size:
+					self._warning(self._labels.mismatching_sizes.replace('#',
+						f'{src_path}: {src_size} byte(s), {dst_path}: {dst_size} bytes(s)')
+					)
+					mismatches += 1
+					bad_dst_file_paths[dst_path] = dst_size
+				self._check_kill_signal()
+			self._info(self._labels.size_check_finished)
+			if not self._config.hashes:
+				with self._tsv_path.open('w', encoding='utf-8') as fh:
+					print('src_path\tsrc_size\tdst_path\tbad_dst_size', file=fh)
+					for src_path, src_size, dst_path in files:
+						bad_dst_size = bad_dst_file_paths[dst_path] if dst_path in bad_dst_file_paths else ''
+						print(f'{src_path}\t{src_size}\t{dst_path}\t{bad_dst_size}', file=fh)
+		if self._config.hashes:	### wait until hashing is finished ###
+			self._info(self._labels.waiting_end_hashing)
+			if hash_thread.is_alive():
+				self._info(self._labels.hashing_in_progress)
+				index = 0
+				while hash_thread.is_alive():
+					self._check_kill_signal()
+					self._echo(f'{"|/-\\"[index]}  ', end='\r')
+					index += 1
+					if index > 3:
+						index = 0
+					sleep(.25)
+			self._info(self._labels.hashing_finished)
+		if self._config.verify and self._config.verify != 'size' and not self._simulate:	### verify by hash value ###
+			bad_dst_hash = ''
+			self._info(self._labels.starting_hash_verification)
+			with self._tsv_path.open('w', encoding='utf-8') as fh:
+				print(f'{"\t".join(hash_thread.keys)}\tbad_{self._config.verify}', file=fh)
+				for cnt, hash_set in enumerate(hash_thread.files, start=1):
+					self._check_kill_signal()
+					self._echo_file_progress(total_files, cnt)
+					dst_hash = FileHash.hashsum(hash_set['dst_path'], algorithm=self._verify)
+					if dst_hash != hash_set[self._verify]:
+						self._warning(self._labels.mismatching_hashes.replace('#',
+							f'{hash_set["src_path"]}: {hash_set[self._verify]}, {hash_set["dst_path"]}: {dst_hash}')
+						)
+						mismatches += 1
+						bad_dst_hash = dst_hash
+					else:
+						bad_dst_hash = ''
+					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}\t{bad_dst_hash}', file=fh)
+			self._info(self._labels.hash_check_finished.replace('#', f'{self._verify}'))
+		if self._config.hashes and (not self._config.verify or self._simulate):	### write tsv file without verification ###
+			with self._tsv_path.open('w', encoding='utf-8') as fh:
+				print(f'{"\t".join(hash_thread.keys)}', file=fh)
+				for cnt, hash_set in enumerate(hash_thread.files, start=1):
+					self._echo_file_progress(total_files, cnt)
+					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}', file=fh)
+		if self._config.hashes and self._config.verify == 'size' and not self._simulate:	### write tsv file with size verification ###
+			with self._tsv_path.open('w', encoding='utf-8') as fh:
+				print(f'{"\t".join(hash_thread.keys)}\tbad_dst_size', file=fh)
+				for cnt, hash_set in enumerate(hash_thread.files, start=1):
+					bad_dst_size = bad_dst_file_paths[hash_set['dst_path']] if hash_set['dst_path'] in bad_dst_file_paths else ''
+					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}\t{bad_dst_size}', file=fh)
 		if self._simulate:	### sumilating copy process ###
 			self._info(self._labels.starting_simulation)
 			collisions = list()
@@ -116,92 +205,8 @@ class Copy:
 				self._echo(self._labels.simulation_aborted)
 			else:
 				self._info(self._labels.simulation_finished)
-			logging.shutdown()
-			return
-		'''
-		if self._config.hashes:	### start hashing ###
-			self._info(self._labels.starting_hashing)
-			hash_thread = HashThread(files, algorithms=self._config.hashes)
-			hash_thread.start()
-		robo_parameters = self._config.robocopy_base_parameters	### robocopy parameters ###
-		robo_parameters.extend(self._config.options)
-		if self._simulate:	### add /l parameter for simulation
-			robo_parameters.append('/l')
-		for src_path in src_dir_paths:	### copy directories ###
-			dst_path = self._dst_path / src_path.name
-			robocopy = RoboCopy(src_path, dst_path, parameters=robo_parameters)
-			self._info(self._labels.executing.replace('#', f'{robocopy}'))
-			robocopy.run(echo=self._echo, kill=self._kill)
-			
-		for src_path in src_file_paths:	### copy files ###
-			robocopy = RoboCopy(src_path.parent, self._dst_path, file=src_path.name, parameters=robo_parameters)
-			self._info(self._labels.executing.replace('#', f'{robocopy}'))
-			robocopy.run(echo=self._echo, kill=self._kill)
-		self._info(self._labels.robocopy_finished)
-		total_files = len(files)
-		mismatches = 0
-		bad_dst_file_paths = dict()
-		if self._config.verify == 'size' and not self._simulate:	### verify files by size ###
-			self._echo_file_progress(total_files, total_files)
-			self._info(self._labels.starting_size_verification)
-			for cnt, (src_path, src_size, dst_path) in enumerate(files, start=1):
-				self._echo_file_progress(total_files, cnt)
-				dst_size = dst_path.stat().st_size
-				if dst_size != src_size:
-					self._warning(self._labels.mismatching_sizes.replace('#',
-						f'{src_path}: {src_size} byte(s), {dst_path}: {dst_size} bytes(s)')
-					)
-					mismatches += 1
-					bad_dst_file_paths[dst_path] = dst_size
-			self._info(self._labels.size_check_finished)
-			if not self._config.hashes:
-				with self._tsv_path.open('w', encoding='utf-8') as fh:
-					print('src_path\tsrc_size\tdst_path\tbad_dst_size', file=fh)
-					for src_path, src_size, dst_path in files:
-						bad_dst_size = bad_dst_file_paths[dst_path] if dst_path in bad_dst_file_paths else ''
-						print(f'{src_path}\t{src_size}\t{dst_path}\t{bad_dst_size}', file=fh)
-		if self._config.hashes:	### wait until hashing is finished ###
-			self._info(self._labels.waiting_end_hashing)
-			if hash_thread.is_alive():
-				self._info(self._labels.hashing_in_progress)
-				index = 0
-				while hash_thread.is_alive():
-					self._echo(f'{"|/-\\"[index]}  ', end='\r')
-					index += 1
-					if index > 3:
-						index = 0
-					sleep(.25)
-			self._info(self._labels.hashing_finished)
-		if self._config.verify and self._config.verify != 'size' and not self._simulate:	### verify by hash value ###
-			bad_dst_hash = ''
-			self._info(self._labels.starting_hash_verification)
-			with self._tsv_path.open('w', encoding='utf-8') as fh:
-				print(f'{"\t".join(hash_thread.keys)}\tbad_{self._config.verify}', file=fh)
-				for cnt, hash_set in enumerate(hash_thread.files, start=1):
-					self._echo_file_progress(total_files, cnt)
-					dst_hash = FileHash.hashsum(hash_set['dst_path'], algorithm=self._verify)
-					if dst_hash != hash_set[self._verify]:
-						self._warning(self._labels.mismatching_hashes.replace('#',
-							f'{hash_set["src_path"]}: {hash_set[self._verify]}, {hash_set["dst_path"]}: {dst_hash}')
-						)
-						mismatches += 1
-						bad_dst_hash = dst_hash
-					else:
-						bad_dst_hash = ''
-					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}\t{bad_dst_hash}', file=fh)
-			self._info(self._labels.hash_check_finished.replace('#', f'{self._verify}'))
-		if self._config.hashes and (not self._config.verify or self._simulate):	### write tsv file without verification ###
-			with self._tsv_path.open('w', encoding='utf-8') as fh:
-				print(f'{"\t".join(hash_thread.keys)}', file=fh)
-				for cnt, hash_set in enumerate(hash_thread.files, start=1):
-					self._echo_file_progress(total_files, cnt)
-					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}', file=fh)
-		if self._config.hashes and self._config.verify == 'size' and not self._simulate:	### write tsv file with size verification ###
-			with self._tsv_path.open('w', encoding='utf-8') as fh:
-				print(f'{"\t".join(hash_thread.keys)}\tbad_dst_size', file=fh)
-				for cnt, hash_set in enumerate(hash_thread.files, start=1):
-					bad_dst_size = bad_dst_file_paths[hash_set['dst_path']] if hash_set['dst_path'] in bad_dst_file_paths else ''
-					print(f'{"\t".join(f'{hash_set[key]}' for key in hash_thread.keys)}\t{bad_dst_size}', file=fh)
+
+
 		end_time = perf_counter()
 		delta = end_time - start_time
 		self._info(self._labels.copy_finished.replace('#', f'{timedelta(seconds=delta)}'))
@@ -242,6 +247,11 @@ class Copy:
 			ex = ChildProcessError(self._labels.robocopy_problem.replace('#', f'{returncode}'))
 			self._error(ex)
 			raise ex
+
+	def _check_kill_signal(self):
+		'''Check if kill signal is set'''
+		if self._kill and self._kill.is_set():
+			raise SystemExit('Kill signal')
 
 	def _run_robocopy(self):
 		'''Run RoboCopy'''
