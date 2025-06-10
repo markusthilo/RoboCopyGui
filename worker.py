@@ -183,7 +183,7 @@ class Copy:
 			collisions = list()
 			col_cnt = 0
 			for src_path, size, dst_path in files:
-				msg = f'{src_path} ({Size(size).readable()}) -> {dst_path}'
+				msg = f'{src_path} ({Size(size)}) -> {dst_path}'
 				if dst_path.exists():
 					self._echo(f'{msg} {self._labels.existing}')
 					collisions.append((src_path, size, dst_path, True))
@@ -198,7 +198,7 @@ class Copy:
 					print('src_path\tsrc_size\tdst_path\tdst_exists', file=fh)
 					for src_path, size, dst_path, exists in collisions:
 						collision = dst_path.name if exists else ''
-						print(f'{src_path}\t{Size(size).readable()}\t{dst_path}\t{collision}', file=fh)
+						print(f'{src_path}\t{Size(size)}\t{dst_path}\t{collision}', file=fh)
 			if col_cnt:
 				self._info(self._labels.collisions.replace('#', f'{col_cnt}'))
 			if self._kill and self._kill.is_set():
@@ -213,7 +213,7 @@ class Copy:
 		if mismatches:
 			self._warning(self._labels.mismatches.replace('#', f'{mismatches}'))
 		logging.shutdown()
-		return 'error' if mismatches else 'green'
+		return
 
 	def _info(self, msg):
 		'''Log info and echo message'''

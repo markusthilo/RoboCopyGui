@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Markus Thilo'
-__version__ = '0.1.0_2025-06-09'
+__version__ = '0.1.0_2025-06-10'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -54,9 +54,13 @@ class AskPathsWindow(Toplevel):
 					if path.is_dir():
 						self._root_paths.append(path)
 			except:
-				pass
-		if not self._root_paths:
-			self._root_paths = [Path(Path.home().anchor)]
+				for i in range(ord('A'), ord('Z')+1):
+					path = Path(f'{chr(i)}:\\')
+					if path.is_dir():
+						self._root_paths.append(path)
+		path = Path(Path.home().anchor)	# anchor of home is a root path regardless what
+		if not path in self._root_paths:
+			self._root_paths.append(Path(Path.home().anchor))
 		self._restriction = restriction if restriction in ('dir', 'file') else None
 		self._multiple = False if multiple is False else True
 		if not title:
