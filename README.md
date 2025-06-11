@@ -22,7 +22,13 @@ Be aware that Nuitka might not work with the newest Python version.
 
 ## Download
 
-Download the latest release from GitHub and unpack anywhere. The application is portable. No installation required.
+Download the latest release from GitHub and unpack anywhere. The application is portable. No installation is required.
+
+It might be necessary to tweak BitDefender. The file robocopygui.exe is incorrectly classified as critical. The file can be added as an exception. To do so, access the following settings:
+
+`Settings > Windows Security > Virus & threat protection > Virus & thread protection settings > Manage settings > Exclusions > Add or remove exclusions`
+
+If the application is run as an administrator, more Robocopy options will work (e.g. /copyall). Furthermore, the RoboCopyGui can shut down the system after the copy process is complete.
 
 ## Language
 

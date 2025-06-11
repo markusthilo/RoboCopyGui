@@ -44,16 +44,32 @@ class Size(int):
 				rnd = round(rnd, 1)
 			if rnd >= 100:
 				rnd = round(rnd)
-			return f'{rnd} {prefix}', rnd
+			return f'{rnd}{prefix}', rnd
 		if self < 0:
 			raise ValueError('Size must be positive')
 		iec, rnd_iec = _round(('PiB', 2**50), ('TiB', 2**40), ('GiB', 2**30), ('MiB', 2**20), ('kiB', 2**10))
 		si, rnd_si = _round(('PB', 10**15), ('TB', 10**12), ('GB', 10**9), ('MB', 10**6), ('kB', 10**3))
-		return (f'{iec} / {si} / ' if rnd_iec or rnd_si else '') + f'{int(self)} ' + ('byte' if self == 1 else 'bytes')
+		return (f'{iec}/{si}/' if rnd_iec or rnd_si else '') + f'{int(self)}B'
 
-	def __add__(self, other):
-		'''Plus'''
-		return Size(int.__add__(self, other))
+	def __add__(self, addend):
+		''' + '''
+		return Size(int.__add__(self, addend))
+
+	def __sub__(self, subtrahend):
+		''' - '''
+		return Size(int.__sub__(self, subtrahend))
+
+	def __mul__(self, factor):
+		''' * '''
+		return Size(int.__mul__(self, factor))
+
+	def __truediv__(self, quotient):
+		''' / '''
+		return Size(int.__floordiv__(self, quotient))
+
+	def __mod__(self, absolut):
+		''' % : Percentage of'''
+		return f'{int.__mul__(self, 100).__floordiv__(absolut)} %'
 
 class RoboCopy(Popen):
 	'''Wrapper for RoboCopy'''
@@ -104,7 +120,6 @@ class RoboCopy(Popen):
 					echo(stripped)
 			if kill and kill.is_set():
 				self.terminate()
-				raise SystemExit('Kill signal')
 		return self.wait()
 
 class FileHash:

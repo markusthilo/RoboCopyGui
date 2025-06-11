@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.2.0_2025-06-10'
+__version__ = '0.2.0_2025-06-11'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -37,7 +37,10 @@ class WorkThread(Thread):
 		super().__init__()
 		self._finish = finish
 		self._kill_event = Event()
-		self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
+		try:
+			self._worker = Copy(src_paths, dst_path, simulate=simulate, echo=echo, kill=self._kill_event, finish=self._finish)
+		except Exception as ex:
+			self._finish(ex)
 
 	def kill(self):
 		'''Kill thread'''
@@ -49,19 +52,10 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run thread'''
-		#from time import sleep	### DEBUG ###
-		#print('Runnung dummy...')
-		#sleep(5)
-		#print('Finish!')
-		#self._finish(None)
-		returncode = self._worker.run()
-		self._finish(returncode)
-		return	#############################
 		try:
-			returncode = self._worker.run()
+			self._finish(self._worker.run())
 		except Exception as ex:
-			returncode = ex
-		self._finish(returncode)
+			self._finish(ex)
 
 class Gui(Tk):
 	'''GUI look and feel'''
@@ -165,7 +159,7 @@ class Gui(Tk):
 		self._info_bg = self._info_text.cget('background')
 		self._info_newline = True
 		self._info_label = Label(self)
-		self._info_label.grid(row=6, column=1, sticky='nswe', padx=self._pad, pady=(0, self._pad))
+		self._info_label.grid(row=6, column=1, sticky='nsw', padx=self._pad, pady=(0, self._pad))
 		self._label_fg = self._info_label.cget('foreground')
 		self._label_bg = self._info_label.cget('background')
 		if self._admin_rights:	### shutdown after finish
@@ -206,6 +200,7 @@ class Gui(Tk):
 				showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
 				return
 			self._source_text.insert('end', f'{path}\n')
+			self._config.initial_dir = f'{path}'
 
 	def _select_source_files(self):
 		'''Select file(s) to add into field'''
@@ -219,6 +214,7 @@ class Gui(Tk):
 				path = Path(filename).absolute()
 				if not path in self._read_source_paths():
 					self._source_text.insert('end', f'{path}\n')
+			self._config.initial_dir = f'{path.parent}'
 
 	def _select_multiple(self):
 		'''Select multiple files and directories to add into field'''
@@ -231,6 +227,7 @@ class Gui(Tk):
 			for path in paths:
 				if not path in self._read_source_paths():
 					self._source_text.insert('end', f'{path}\n')
+			self._config.initial_dir = f'{path.parent}'
 
 	def _get_source_paths(self):
 		'''Get source paths from text field'''
@@ -415,6 +412,10 @@ class Gui(Tk):
 			self._config.verify = choosen
 		self._verify_selector['values'] = self._gen_verify_list()
 
+	def _clear_source(self):
+		'''Clear source text'''
+		self._source_text.delete('1.0', 'end')
+
 	def _clear_info(self):
 		'''Clear info text'''
 		self._info_text.configure(state='normal')
@@ -440,6 +441,7 @@ class Gui(Tk):
 			self._simulate_button_text.set(self._labels.abort)
 		else:
 			self._simulate_button.configure(state='disabled')
+			self._clear_source()
 		self._work_thread = WorkThread(
 			src_paths,
 			dst_path,
@@ -478,6 +480,7 @@ class Gui(Tk):
 
 	def _echo_help(self):
 		'''Show RoboCopy help'''
+		self._clear_info()
 		for line in RoboCopy(parameters='/?').popen().stdout:
 			self.echo(line.strip())
 		self.echo(self._labels.help_text)
@@ -486,6 +489,11 @@ class Gui(Tk):
 		'''Init warning functionality'''
 		self._warning_state = 'disabled'
 		self._warning()
+
+	def _enable_warning(self):
+		'''Enable red text field and blinking Label'''
+		self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
+		self._warning_state = 'enable'
 
 	def _warning(self):
 		'''Show flashing warning'''
@@ -587,23 +595,20 @@ class Gui(Tk):
 
 	def finished(self, returncode):
 		'''Run this when worker has finished copy process'''
-		if isinstance(returncode, SystemExit):
-			self._reset()
-			return
-		if self._admin_rights and self._shutdown.get():	### Shutdown dialog ###
-			self._shutdown_dialog()
-		if isinstance(returncode, Exception):
-			self._info_text.configure(foreground=self._defs.red_fg, background=self._defs.red_bg)
-			self._warning_state = 'enable'
-			showerror(
-				title = self._labels.error, 
-				message = f'{self._labels.aborted_on_error}\n\n{type(returncode)}:\n{returncode}'
-			)
-		elif returncode:
-			if isinstance(returncode, str):
+		if returncode:
+			if self._admin_rights and self._shutdown.get():	### Shutdown dialog ###
+				self._shutdown_dialog()
+			if isinstance(returncode, Exception):
+				self._enable_warning()
+				showerror(
+					title = self._labels.error, 
+					message = f'{self._labels.aborted_on_error}\n\n{type(returncode)}:\n{returncode}'
+				)
+			elif isinstance(returncode, str):
+				self._enable_warning()
 				showwarning(title=self._labels.warning, message=self._labels.process_returned.replace('#', returncode))
-		else:
-			self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
+			else:
+				self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
 		self._reset()
 
 if __name__ == '__main__':  # start here when run as application
