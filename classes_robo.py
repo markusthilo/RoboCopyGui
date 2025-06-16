@@ -19,10 +19,6 @@ class Config:
 				self.__dict__[key] = value
 				self._keys.append(key)
 
-	def exists(self, key):
-		'''Check if key exists'''
-		return key in self._keys
-
 	def save(self, path=None):
 		'''Save config file'''
 		if path:

@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.2.0_2025-06-11'
+__version__ = '0.2.1_2025-06-16'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -85,7 +85,7 @@ class Gui(Tk):
 		self.resizable(True, True)
 		self._pad = int(self._font['size'] * self._defs.pad_factor)
 		frame = Frame(self)	### source selector
-		frame.grid(row=0, column=0, sticky='nw')
+		frame.grid(row=0, column=0, sticky='nswe')
 		self._source_dir_button = Button(frame, text=self._labels.directory, command=self._select_source_dir)	# source dir button #
 		self._source_dir_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_dir_button, self._labels.source_dir_tip)
@@ -95,6 +95,9 @@ class Gui(Tk):
 		self._source_multiple_button = Button(frame, text=self._labels.multiple, command=self._select_multiple)	# multiple button #
 		self._source_multiple_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
 		Hovertip(self._source_multiple_button, self._labels.source_multiple_tip)
+		self._clear_source_button = Button(frame, text=self._labels.clear, command=self._clear_source)	# clear source button
+		self._clear_source_button.pack(side='bottom', anchor='sw', padx=self._pad, pady=self._pad)
+		Hovertip(self._clear_source_button, self._labels.clear_source_tip)
 		self._source_text = ScrolledText(self, # source field
 			font = (self._font['family'], self._font['size']),
 			wrap = "none",
@@ -148,7 +151,7 @@ class Gui(Tk):
 		self._exec_button.grid(row=4, column=3, sticky='nswe', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._exec_button, self._labels.exec_tip)
 		self._help_button = Button(self, text=self._labels.help, command=self._echo_help)	### help ###
-		self._help_button.grid(row=5, column=0, sticky='nwe', padx=self._pad, pady=self._pad)
+		self._help_button.grid(row=5, column=0, sticky='nwe', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._help_button, self._labels.help_tip)
 		self._info_text = ScrolledText(self, font=(self._font['family'], self._font['size']), padx=self._pad, pady=self._pad) ### info ###
 		self._info_text.grid(row=5, column=1, columnspan=3, sticky='nswe',
@@ -414,7 +417,8 @@ class Gui(Tk):
 
 	def _clear_source(self):
 		'''Clear source text'''
-		self._source_text.delete('1.0', 'end')
+		if askyesno(title=self._labels.warning, message=self._labels.ask_clear_source):
+			self._source_text.delete('1.0', 'end')
 
 	def _clear_info(self):
 		'''Clear info text'''
@@ -441,7 +445,6 @@ class Gui(Tk):
 			self._simulate_button_text.set(self._labels.abort)
 		else:
 			self._simulate_button.configure(state='disabled')
-			self._clear_source()
 		self._work_thread = WorkThread(
 			src_paths,
 			dst_path,
@@ -609,6 +612,7 @@ class Gui(Tk):
 				showwarning(title=self._labels.warning, message=self._labels.process_returned.replace('#', returncode))
 			else:
 				self._info_text.configure(foreground=self._defs.green_fg, background=self._defs.green_bg)
+				self._source_text.delete('1.0', 'end')
 		self._reset()
 
 if __name__ == '__main__':  # start here when run as application

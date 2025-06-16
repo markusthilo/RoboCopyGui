@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Markus Thilo'
-__version__ = '0.1.0_2025-06-10'
+__version__ = '0.1.1_2025-06-16'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -72,7 +72,7 @@ class AskPathsWindow(Toplevel):
 			else:
 				title += 'directories and files' if self._multiple else 'directory and file'
 		self._focus_path = Path(initialdir).absolute() if initialdir else Path.home()
-		self._focus_path = self._focus_path if self._focus_path.exists() else Path.home()
+		self._focus_path = self._focus_path if self._focus_path.is_dir() else Path.home()
 		super().__init__()	### tkinter windows configuration ###
 		self.transient(parent)
 		self.focus_set()
@@ -159,7 +159,7 @@ class AskPathsWindow(Toplevel):
 		'''Focus to directory'''
 		if item := self._tree.identify('item', event.x, event.y):
 			path = Path(item)
-			if path.is_dir():
+			if path.is_dir() and path != self._focus_path:
 				self._focus_path = path
 				self._tree.delete(*self._tree.get_children())
 				self._gen_tree()

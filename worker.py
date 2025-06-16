@@ -178,30 +178,47 @@ class Copy:
 		src_file_paths = set()	# given files to copy
 		self._info(self._labels.reading_source)
 		for path in self._src_paths:
-			src_path = path.absolute()
-			if src_path.is_dir():
-				src_dir_paths.add(src_path)
-			elif src_path.is_file():
-				src_file_paths.add(src_path)
-			else:
-				self._error(self._labels.invalid_path.replace('#', f'{path}'))
+			try:
+				src_path = path.absolute()
+				if src_path.is_dir():
+					src_dir_paths.add(src_path)
+					continue
+				if src_path.is_file():
+					src_file_paths.add(src_path)
+					continue
+			except:
+				pass
+			self._error(self._labels.invalid_path.replace('#', f'{path}'))
 		src_dir_paths = list(src_dir_paths)
 		src_file_paths = list(src_file_paths)
 		self._files = list()	# all files to copy (including subdirectories): (path, size)
 		self._total_size = Size(0)	# total size of all files to copy
+		bad_paths = list()	# files that might be overwritten (simulation)
 		for this_src_dir_path in src_dir_paths:
 			for path in this_src_dir_path.rglob('*'):
 				if self._check_kill_signal():
 					return
-				if path.is_file():
-					size = Size(path.stat().st_size)
-					self._files.append((path, size, self._dst_path / path.relative_to(this_src_dir_path.parent)))
-					self._total_size += size
+				try:
+					if path.is_file():
+						size = Size(path.stat().st_size)
+						self._files.append((path, size, self._dst_path / path.relative_to(this_src_dir_path.parent)))
+						self._total_size += size
+				except:
+					bad_paths.append(path)
 		for path in src_file_paths:
-			size = Size(path.stat().st_size)
-			self._files.append((path, size, self._dst_path / path.name))
-			self._total_size += size
+			try:
+				size = Size(path.stat().st_size)
+				self._files.append((path, size, self._dst_path / path.name))
+				self._total_size += size
+			except:
+				bad_paths.append(path)
 		self._info(f'{self._labels.done_reading}: {len(self._files)} {self._labels.files}, {self._total_size}')
+		if len_bad_paths := len(bad_paths):
+			msg = self._labels.invalid_paths.replace('#', f'{len_bad_paths}')
+			msg += ': ' + ', '.join(f'{path}' for path in bad_paths[:100])
+			if len_bad_paths > 100:
+				msg += ', ...'
+			self._warning()
 		if self._config.hashes:	### start hashing ###
 			self._info(self._labels.starting_hashing)
 			self._hash_thread = HashThread(self._files, algorithms=self._config.hashes)
