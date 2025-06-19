@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.2.1_2025-06-16'
+__version__ = '0.3.0_2025-06-19'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -16,8 +16,7 @@ from ctypes import windll
 from subprocess import run
 from tkinter import Tk, PhotoImage, StringVar, BooleanVar, Checkbutton, Toplevel
 from tkinter.font import nametofont
-from tkinter.ttk import Frame, Label, Entry, Button, Combobox
-from tkinter.ttk import Scrollbar, Spinbox, Progressbar
+from tkinter.ttk import Frame, Label, Entry, Button, Combobox, LabelFrame, Progressbar
 from tkinter.scrolledtext import ScrolledText
 from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
@@ -112,20 +111,26 @@ class Gui(Tk):
 		self._destination_entry = Entry(self, textvariable=self._destination)
 		self._destination_entry.grid(row=1, column=1, columnspan=3, sticky='nsew', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._destination_button, self._labels.destination_tip)
-		self._options_var = StringVar(value=self._labels.options)	### options ###
-		self._options_selector = Combobox(self, values=self._gen_options_list(), state='readonly', textvariable=self._options_var)
-		self._options_selector.grid(row=2, column=1, sticky='nswe', padx=self._pad)
+		self._options_var = StringVar(value=self._gen_options_label())	### options ###
+		frame = LabelFrame(self, text=self._labels.options)
+		frame.grid(row=2, column=1, sticky='nswe', padx=self._pad)
+		self._options_selector = Combobox(frame, values=self._gen_options_list(), state='readonly', textvariable=self._options_var)
+		self._options_selector.pack(fill='both', expand=True, padx=self._pad, pady=(0, self._pad))
 		self._options_selector.bind('<<ComboboxSelected>>', self._options_event)
 		Hovertip(self._options_selector, self._labels.options_tip)
 		self.possible_hashes = FileHash.get_algorithms()	### hash ###
-		self._hash_var = StringVar(value=self._labels.hash)
-		self._hash_selector = Combobox(self, values=self._gen_hash_list(), state='readonly', textvariable=self._hash_var)
-		self._hash_selector.grid(row=2, column=2, sticky='nswe', padx=self._pad)
+		self._hash_var = StringVar(value=self._gen_hash_label())
+		frame = LabelFrame(self, text=self._labels.hash)
+		frame.grid(row=2, column=2, sticky='nswe', padx=self._pad)
+		self._hash_selector = Combobox(frame, values=self._gen_hash_list(), state='readonly', textvariable=self._hash_var)
+		self._hash_selector.pack(fill='both', expand=True, padx=self._pad, pady=(0, self._pad))
 		self._hash_selector.bind('<<ComboboxSelected>>', self._hash_event)
 		Hovertip(self._hash_selector, self._labels.hash_tip)
-		self._verify_var = StringVar(value=self._labels.verify)	### verify ###
-		self._verify_selector = Combobox(self, values=self._gen_verify_list(), state='readonly', textvariable=self._verify_var)
-		self._verify_selector.grid(row=2, column=3, sticky='nswe', padx=self._pad)
+		self._verify_var = StringVar(value=self._gen_verify_label())	### verify ###
+		frame = LabelFrame(self, text=self._labels.verify)
+		frame.grid(row=2, column=3, sticky='nswe', padx=self._pad)
+		self._verify_selector = Combobox(frame, values=self._gen_verify_list(), state='readonly', textvariable=self._verify_var)
+		self._verify_selector.pack(fill='both', expand=True, padx=self._pad, pady=(0, self._pad))
 		self._verify_selector.bind('<<ComboboxSelected>>', self._verify_event)
 		Hovertip(self._verify_selector, self._labels.verify_tip)
 		self._log_button = Button(self, text=self._labels.log, command=self._select_log)	### log ###
@@ -193,7 +198,7 @@ class Gui(Tk):
 		path = Path(source)
 		if path.exists():
 			return path
-			showerror(title=self._labels.error, message=self._labels.src_path_not_found.replace('#', f'{path}'))
+		showerror(title=self._labels.error, message=self._labels.src_path_not_found.replace('#', f'{path}'))
 
 	def _select_source_dir(self):
 		'''Select directory to add into field'''
@@ -374,10 +379,21 @@ class Gui(Tk):
 			for hash in self._config.hashes
 		]
 
+	def _gen_options_label(self):
+		'''Generate label for options menu'''
+		return ' '.join(self._config.options)
+
+	def _gen_hash_label(self):
+		'''Generate label for hash menu'''
+		return ', '.join(self._config.hashes)
+
+	def _gen_verify_label(self):
+		'''Generate label for verification menu'''
+		return self._labels.size if self._config.verify == 'size' else self._config.verify
+
 	def _options_event(self, dummy_event):
 		'''Robocopy options selection'''
 		choosen = self._options_var.get()[2:]
-		self._options_var.set(self._labels.options)	# reset shown text
 		if choosen in self._config.options:
 			self._config.options.remove(choosen)
 		else:
@@ -389,11 +405,11 @@ class Gui(Tk):
 				except ValueError:
 					pass
 		self._options_selector['values'] = self._gen_options_list()
+		self._options_var.set(self._gen_options_label())
 
 	def _hash_event(self, dummy_event):
 		'''Hash algorithm selection'''
 		choosen = self._hash_var.get()[2:]
-		self._hash_var.set(self._labels.hash)	# reset shown text
 		if choosen in self._config.hashes:
 			self._config.hashes.remove(choosen)
 			if choosen == self._config.verify:
@@ -403,17 +419,19 @@ class Gui(Tk):
 			self._config.hashes.sort()
 		self._hash_selector['values'] = self._gen_hash_list()
 		self._verify_selector['values'] = self._gen_verify_list()
+		self._hash_var.set(self._gen_hash_label())
+		self._verify_var.set(self._gen_verify_label())
 
 	def _verify_event(self, dummy_event):
 		'''Hash algorithm selection'''
 		choosen = self._verify_var.get()[2:]
-		self._verify_var.set(self._labels.verify)	# reset shown text
 		choosen = 'size' if choosen == self._labels.size else choosen
 		if choosen == self._config.verify:
 			self._config.verify = ''
 		else:
 			self._config.verify = choosen
 		self._verify_selector['values'] = self._gen_verify_list()
+		self._verify_var.set(self._gen_verify_label())
 
 	def _clear_source(self):
 		'''Clear source text'''
