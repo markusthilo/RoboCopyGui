@@ -67,6 +67,22 @@ class Size(int):
 		''' % : Percentage of'''
 		return f'{int.__mul__(self, 100).__floordiv__(absolut)} %'
 
+class NormString:
+	'''Normalize string to given length for better echo'''
+
+	def __init__(self, max_len):
+		'''Calculate only once'''
+		self._max_len = max_len
+		self._part_len = (max_len - 3) // 2
+
+	def get(self, msg):
+		'''Normalize'''
+		len_msg = len(msg)
+		if len_msg > self._max_len:
+			return f'{msg[:self._part_len]}...{msg[-self._part_len:]}'
+		else:
+			return msg + ' ' * (self._max_len - len_msg)
+
 class RoboCopy(Popen):
 	'''Wrapper for RoboCopy'''
 
@@ -105,15 +121,19 @@ class RoboCopy(Popen):
 		)
 		return self
 
-	def run(self, echo=print, kill=None):
+	def run(self, echo=print, max_len=79, kill=None):
 		'''Run RoboCopy and yield stdout'''
 		self.popen()
+		short_path = ''
+		short = NormString(max_len)
+		shorter = NormString(max_len - 8)
 		for line in self.stdout:
-			if stripped := line.strip():
-				if stripped.endswith('%'):
-					echo(stripped, end='\r')
+			if msg := line.strip():
+				if msg.endswith('%'):
+					echo(f'{msg} of {short_path}', end='\r')
 				else:
-					echo(stripped)
+					echo(short.get(msg), end='\r')
+					short_path = shorter.get(msg)
 			if kill and kill.is_set():
 				self.terminate()
 		return self.wait()

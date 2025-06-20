@@ -8,7 +8,7 @@ from time import time, strftime
 from os import getpid
 from time import strftime, sleep, perf_counter
 from datetime import timedelta
-from classes_robo import Config, RoboCopy, HashThread, FileHash, Size
+from classes_robo import Config, RoboCopy, HashThread, FileHash, Size, NormString
 
 __parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python' else Path(__executable__).parent
 
@@ -171,6 +171,42 @@ class Copy:
 				line += f'{self._bad_files[hash_set["src_path"]]}'
 			print(line, file=fh)
 
+	def _info(self, msg):
+		'''Log info and echo message'''
+		logging.info(msg)
+		self._echo(msg)
+
+	def _warning(self, msg):
+		'''Log and echo warning'''
+		logging.warning(msg)
+		self._echo( f'{self._labels.warning}: msg')
+
+	def _error(self, msg):
+		'''Log and echo error'''
+		logging.error(msg)
+		logging.shutdown()
+		returncode = f'{self._labels.error}: msg'
+		self._echo(returncode)
+		return returncode
+
+	def _check_kill_signal(self):
+		'''Check if kill signal is set'''
+		if self._kill and self._kill.is_set():
+			self._info(self._labels.aborting_by_user)
+			logging.shutdown()
+			return True
+		return False
+
+	def	_echo_file_progress(self, processed_files):
+		'''Show progress while processing files, percentage by nimber of files'''
+		self._echo(f'{processed_files} {self._labels.of} {self._total_files}, {processed_files * 100 // self._total_files} %', end='\r')
+
+	def	_echo_size_progress(self, processed_files, processed_size):
+		'''Show progress while processing files, percentage by size'''
+		msg = f'{processed_files} {self._labels.of} {self._total_files}, {processed_size} {self._labels.of} {self._total_size}'
+		msg += f', {processed_size % self._total_size}'
+		self._echo(msg, end='\r')
+
 	def run(self):
 		'''Execute copy process (or simulation)'''
 		start_time = perf_counter()		### read source structure ###
@@ -194,8 +230,14 @@ class Copy:
 		self._files = list()	# all files to copy (including subdirectories): (path, size)
 		self._total_size = Size(0)	# total size of all files to copy
 		bad_paths = list()	# files that might be overwritten (simulation)
+		echo_time = int(perf_counter() * 10)
+		self._norm_string = NormString(self._config.max_echo_len)
 		for this_src_dir_path in src_dir_paths:
 			for path in this_src_dir_path.rglob('*'):
+				int_perf_counter = int(perf_counter() * 10)
+				if int_perf_counter > echo_time:
+					self._echo(self._norm_string.get(f'{path}'), end='\r')
+					echo_time = int_perf_counter
 				if self._check_kill_signal():
 					return
 				try:
@@ -206,6 +248,7 @@ class Copy:
 				except:
 					bad_paths.append(path)
 		for path in src_file_paths:
+			self._echo(self._norm_string.get(f'{path}'), end='\r')
 			try:
 				size = Size(path.stat().st_size)
 				self._files.append((path, size, self._dst_path / path.name))
@@ -231,7 +274,7 @@ class Copy:
 			dst_path = self._dst_path / src_path.name
 			robocopy = RoboCopy(src_path, dst_path, parameters=robo_parameters)
 			self._info(self._labels.executing.replace('#', f'{robocopy}'))
-			returncode = robocopy.run(echo=self._echo, kill=self._kill)
+			returncode = robocopy.run(echo=self._echo, max_len=self._config.max_echo_len, kill=self._kill)
 			if self._check_kill_signal():
 				return
 			if returncode >= 8:
@@ -239,7 +282,7 @@ class Copy:
 		for src_path in src_file_paths:	### copy files ###
 			robocopy = RoboCopy(src_path.parent, self._dst_path, file=src_path.name, parameters=robo_parameters)
 			self._info(self._labels.executing.replace('#', f'{robocopy}'))
-			returncode = robocopy.run(echo=self._echo, kill=self._kill)
+			returncode = robocopy.run(echo=self._echo, max_len=self._config.max_echo_len, kill=self._kill)
 			if self._check_kill_signal():
 				return
 			if returncode >= 8:
@@ -288,40 +331,3 @@ class Copy:
 			returncode = True
 		logging.shutdown()
 		return returncode
-
-	def _info(self, msg):
-		'''Log info and echo message'''
-		logging.info(msg)
-		self._echo(msg)
-
-	def _warning(self, msg):
-		'''Log and echo warning'''
-		logging.warning(msg)
-		self._echo( f'{self._labels.warning}: msg')
-
-	def _error(self, msg):
-		'''Log and echo error'''
-		logging.error(msg)
-		logging.shutdown()
-		returncode = f'{self._labels.error}: msg'
-		self._echo(returncode)
-		return returncode
-
-	def _check_kill_signal(self):
-		'''Check if kill signal is set'''
-		if self._kill and self._kill.is_set():
-			self._info(self._labels.aborting_by_user)
-			logging.shutdown()
-			return True
-		return False
-
-	def	_echo_file_progress(self, processed_files):
-		'''Show progress while processing files, percentage by nimber of files'''
-		self._echo(f'{processed_files} {self._labels.of} {self._total_files}, {processed_files * 100 // self._total_files} %', end='\r')
-
-	def	_echo_size_progress(self, processed_files, processed_size):
-		'''Show progress while processing files, percentage by size'''
-		msg = f'{processed_files} {self._labels.of} {self._total_files}, {processed_size} {self._labels.of} {self._total_bytes}'
-		msg += f', {processed_bytes % total_bytes}'
-		self._echo(msg, end='\r')
-
