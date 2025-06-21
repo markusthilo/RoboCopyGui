@@ -6,7 +6,7 @@ It uses MS Windows' Robocopy for speed and reliability.
 An additional verification by file size or hash value is implemented.
 A file list with hashes can be created (tab-separated CSV).
 
-![RoboCopy screenshot](screenshot.png)
+![screenshot](https://github.com/user-attachments/assets/80741101-b5d1-44a5-9a87-e88845ad7dfb)
 
 ## Installation (Developers)
 
