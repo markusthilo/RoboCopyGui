@@ -12,17 +12,30 @@ class Config:
 
 	def __init__(self, path):
 		'''Read config file'''	
-		self._path = path
-		self._keys = list()
-		with self._path.open(encoding='utf-8') as fp:
+		with path.open(encoding='utf-8') as fp:
 			for key, value in load(fp).items():
 				self.__dict__[key] = value
-				self._keys.append(key)
 
-	def save(self, path=None):
+class Settings(Config):
+	'''Handle settings file in JSON format'''
+
+	def __init__(self, path):
+		'''Read settings file'''
+		self._path = path
+		self._keys = ('options', 'hashes', 'verify')
+		try:
+			with self._path.open(encoding='utf-8') as fp:
+				items = load(fp)
+		except:
+			items = dict()
+		self.options = items['options'] if 'options' in items else ['/compress', '/z']
+		self.hashes = items['hashes'] if 'hashes' in items else ['md5']
+		self.verify = items['verify'] if 'verify' in items else 'size'
+		self._path.parent.mkdir(parents=True, exist_ok=True)
+		self.save()
+
+	def save(self):
 		'''Save config file'''
-		if path:
-			self._path = path
 		with self._path.open('w', encoding='utf-8') as fp:
 			dump({key: self.__dict__[key] for key in self._keys}, fp)
 
