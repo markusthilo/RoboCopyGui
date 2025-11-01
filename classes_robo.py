@@ -10,11 +10,58 @@ from threading import Thread
 class Config:
 	'''Handle configuration file in JSON format'''
 
-	def __init__(self, path):
-		'''Read config file'''	
-		with path.open(encoding='utf-8') as fp:
+	def __init__(self, app_path):
+		'''Read config file'''
+		self._app_path = app_path
+		self._path = self._app_path / 'config.json'
+		self.load()
+
+	def load(self):
+		'''Read config file'''
+		with self._path.open(encoding='utf-8') as fp:
 			for key, value in load(fp).items():
-				self.__dict__[key] = value
+				if key.endswith('_path'):
+					if value.startswith('$HOME/') or value.startswith('$HOME\\'):
+						self.__dict__[key] = Path().home().joinpath(value[6:]).resolve()
+					elif value.startswith('$APP/') or value.startswith('$APP\\'):
+						self.__dict__[key] = app_path.joinpath(value[5:]).resolve()
+					else:
+						self.__dict__[key] = Path(value).resolve()
+				else:	
+					self.__dict__[key] = value
+
+class Settings(Config):
+	'''Handle user settings'''
+
+	def __init__(self, app_path, parent_path):
+		'''Generate object for setting, try to load from JSON file'''
+		self._app_path = app_path
+		self._path = parent_path / 'settings.json'
+		try:
+			self.load()
+		except:
+			self._path.mkdir(parents=True, exist_ok=True)
+
+		self._keys = ('destination', 'qualicheck', 'sendmail', 'trigger', 'user')
+		self.initial_dir_path = self.initial_dir_path if initial_dir_path in 
+		self.dst_dir_path
+    	self.log_dir_path
+	    self.options = ["/compress", "/z"]
+    	self.hashes = ["md5"]
+    	self.verify = "size"
+
+
+		self.destination = items['destination'] if 'destination' in items else ''
+		self.qualicheck = items['qualicheck'] if 'qualicheck' in items else False
+		self.sendmail = items['sendmail'] if 'sendmail' in items else True
+		self.trigger = items['trigger'] if 'trigger' in items else True
+		self.user = items['user'] if 'user' in items else ''
+		self.save()
+
+	def save(self):
+		'''Save config file'''
+		with self._path.open('w', encoding='utf-8') as fp:
+			dump({key: self.__dict__[key] for key in self._keys}, fp)
 
 class Settings(Config):
 	'''Handle settings file in JSON format'''
