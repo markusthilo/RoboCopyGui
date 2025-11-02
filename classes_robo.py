@@ -21,12 +21,15 @@ class Config:
 		with self._path.open(encoding='utf-8') as fp:
 			for key, value in load(fp).items():
 				if key.endswith('_path'):
-					if value.startswith('$HOME/') or value.startswith('$HOME\\'):
-						self.__dict__[key] = Path().home().joinpath(value[6:]).resolve()
-					elif value.startswith('$APP/') or value.startswith('$APP\\'):
-						self.__dict__[key] = app_path.joinpath(value[5:]).resolve()
-					else:
-						self.__dict__[key] = Path(value).resolve()
+					try:
+						if value.startswith('$HOME/') or value.startswith('$HOME\\'):
+							self.__dict__[key] = Path().home().joinpath(value[6:]).resolve()
+						elif value.startswith('$APP/') or value.startswith('$APP\\'):
+							self.__dict__[key] = app_path.joinpath(value[5:]).resolve()
+						else:
+							self.__dict__[key] = Path(value).resolve()
+					except:
+						self.__dict__[key] = None
 				else:	
 					self.__dict__[key] = value
 
@@ -41,22 +44,16 @@ class Settings(Config):
 			self.load()
 		except:
 			self._path.mkdir(parents=True, exist_ok=True)
+		self.src_dir_path = self._get_dir('src_dir_path')
+		self.dst_dir_path = self._get_dir('dst_dir_path')
+		self.log_dir_path = self._get_dir('log_dir_path')
+		self.options = self.options if 'options' in self.__dict__ else ['/compress', '/z']
+		self.hashes = self.hashes if 'hashes' in self.__dict__ else ['md5']
+		self.verify = self.verify if 'verify' in self.__dict__ else 'size'
 
-		self._keys = ('destination', 'qualicheck', 'sendmail', 'trigger', 'user')
-		self.initial_dir_path = self.initial_dir_path if initial_dir_path in 
-		self.dst_dir_path
-    	self.log_dir_path
-	    self.options = ["/compress", "/z"]
-    	self.hashes = ["md5"]
-    	self.verify = "size"
-
-
-		self.destination = items['destination'] if 'destination' in items else ''
-		self.qualicheck = items['qualicheck'] if 'qualicheck' in items else False
-		self.sendmail = items['sendmail'] if 'sendmail' in items else True
-		self.trigger = items['trigger'] if 'trigger' in items else True
-		self.user = items['user'] if 'user' in items else ''
-		self.save()
+	def _get_dir(self, key):
+		'''Get directory path to given key'''
+		return self.__dict__[key] if key in self.__dict__ and self.__dict__ and self.__dict__[key].is_dir() else None
 
 	def save(self):
 		'''Save config file'''

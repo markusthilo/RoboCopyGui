@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-10-31'
+__version__ = '0.4.0_2025-11-02'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
