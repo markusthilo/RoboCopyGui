@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-11-02'
+__version__ = '0.4.0_2025-11-07'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -22,7 +22,7 @@ from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
 from worker import Copy
-from classes_robo import Config, FileHash, RoboCopy
+from classes_robo import Config, Settings, FileHash, RoboCopy
 from tk_pathdialog import askpaths
 from tkinter.messagebox import showinfo
 
@@ -67,6 +67,7 @@ class Gui(Tk):
 		self._config = Config(__parent_path__ / 'config.json')
 		self._config.application = __application__
 		self._config.version = __version__
+		self._settings = Settings()
 		self._admin_rights = windll.shell32.IsUserAnAdmin() != 0
 		self._work_thread = None
 		self.title(f'{__application__} v{__version__}')	### define the gui ###
@@ -135,7 +136,7 @@ class Gui(Tk):
 		Hovertip(self._verify_selector, self._labels.verify_tip)
 		self._log_button = Button(self, text=self._labels.log, command=self._select_log)	### log ###
 		self._log_button.grid(row=3, column=0, sticky='nswe', padx=self._pad, pady=self._pad)
-		self._log = StringVar(value=self._config.log_dir)
+		self._log = StringVar(value=self._settings.log_dir_path)
 		self._log_entry = Entry(self, textvariable=self._log)
 		self._log_entry.grid(row=3, column=1, columnspan=3, sticky='nswe', padx=self._pad, pady=self._pad)
 		Hovertip(self._log_button, self._labels.log_tip)
@@ -359,37 +360,37 @@ class Gui(Tk):
 	def _gen_options_list(self):
 		'''Generate list of options'''
 		return [
-			f'\u2611 {option}' if option in self._config.options else f'\u2610 {option}'
+			f'\u2611 {option}' if option in self._settings.options else f'\u2610 {option}'
 			for option in self._config.robocopy_parameters
 		]
 
 	def _gen_hash_list(self):
 		'''Generate list of hashes to check'''
 		return [
-			f'\u2611 {hash}' if hash in self._config.hashes else f'\u2610 {hash}'
+			f'\u2611 {hash}' if hash in self._settings.hashes else f'\u2610 {hash}'
 			for hash in self.possible_hashes
 		]
 
 	def _gen_verify_list(self):
 		'''Generate list of verification methodes'''
 		return [
-			f'\u2611 {self._labels.size}' if self._config.verify == 'size' else f'\u2610 {self._labels.size}'
+			f'\u2611 {self._labels.size}' if self._settings.verify == 'size' else f'\u2610 {self._labels.size}'
 		] + [
-			f'\u2611 {hash}' if self._config.verify == hash else f'\u2610 {hash}'
-			for hash in self._config.hashes
+			f'\u2611 {hash}' if self._settings.verify == hash else f'\u2610 {hash}'
+			for hash in self._settings.hashes
 		]
 
 	def _gen_options_label(self):
 		'''Generate label for options menu'''
-		return ' '.join(self._config.options)
+		return ' '.join(self._settings.options)
 
 	def _gen_hash_label(self):
 		'''Generate label for hash menu'''
-		return ', '.join(self._config.hashes)
+		return ', '.join(self._settings.hashes)
 
 	def _gen_verify_label(self):
 		'''Generate label for verification menu'''
-		return self._labels.size if self._config.verify == 'size' else self._config.verify
+		return self._labels.size if self._settings.verify == 'size' else self._settings.verify
 
 	def _options_event(self, dummy_event):
 		'''Robocopy options selection'''
@@ -451,7 +452,7 @@ class Gui(Tk):
 		if self._mk_log_dir():
 			return
 		try:
-			self._config.save()
+			self._settings.save()
 		except:
 			showerror(title=self._labels.warning, message=self._labels.config_error)
 			return
@@ -558,7 +559,7 @@ class Gui(Tk):
 				return
 		self._get_log_dir()
 		try:
-			self._config.save()
+			self._settings.save()
 		except:
 			pass
 		self.destroy()

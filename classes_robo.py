@@ -8,38 +8,20 @@ from hashlib import algorithms_available, file_digest
 from threading import Thread
 
 class Config:
-	'''Handle configuration file in JSON format'''
+	'''Load configuration file in JSON format'''
 
-	def __init__(self, app_path):
+	def __init__(self, path):
 		'''Read config file'''
-		self._app_path = app_path
-		self._path = self._app_path / 'config.json'
-		self.load()
-
-	def load(self):
-		'''Read config file'''
-		with self._path.open(encoding='utf-8') as fp:
+		with path.open(encoding='utf-8') as fp:
 			for key, value in load(fp).items():
-				if key.endswith('_path'):
-					try:
-						if value.startswith('$HOME/') or value.startswith('$HOME\\'):
-							self.__dict__[key] = Path().home().joinpath(value[6:]).resolve()
-						elif value.startswith('$APP/') or value.startswith('$APP\\'):
-							self.__dict__[key] = app_path.joinpath(value[5:]).resolve()
-						else:
-							self.__dict__[key] = Path(value).resolve()
-					except:
-						self.__dict__[key] = None
-				else:	
-					self.__dict__[key] = value
+				self.__dict__[key] = value
 
-class Settings(Config):
+class Settings:
 	'''Handle user settings'''
 
-	def __init__(self, app_path, parent_path):
+	def __init__(self):
 		'''Generate object for setting, try to load from JSON file'''
-		self._app_path = app_path
-		self._path = parent_path / 'settings.json'
+		self._path = Path().home().joinpath('AppData', 'Local', 'RoboCopyGui', 'settings.json')
 		try:
 			self.load()
 		except:
@@ -53,30 +35,7 @@ class Settings(Config):
 
 	def _get_dir(self, key):
 		'''Get directory path to given key'''
-		return self.__dict__[key] if key in self.__dict__ and self.__dict__ and self.__dict__[key].is_dir() else None
-
-	def save(self):
-		'''Save config file'''
-		with self._path.open('w', encoding='utf-8') as fp:
-			dump({key: self.__dict__[key] for key in self._keys}, fp)
-
-class Settings(Config):
-	'''Handle settings file in JSON format'''
-
-	def __init__(self, path):
-		'''Read settings file'''
-		self._path = path
-		self._keys = ('options', 'hashes', 'verify')
-		try:
-			with self._path.open(encoding='utf-8') as fp:
-				items = load(fp)
-		except:
-			items = dict()
-		self.options = items['options'] if 'options' in items else ['/compress', '/z']
-		self.hashes = items['hashes'] if 'hashes' in items else ['md5']
-		self.verify = items['verify'] if 'verify' in items else 'size'
-		self._path.parent.mkdir(parents=True, exist_ok=True)
-		self.save()
+		return self.__dict__[key] if key in self.__dict__ and self.__dict__[key].is_dir() else None
 
 	def save(self):
 		'''Save config file'''
