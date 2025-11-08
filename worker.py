@@ -2,58 +2,33 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from sys import executable as __executable__
-from pathlib import Path
-from time import time, strftime
 from os import getpid
+from pathlib import Path
 from time import strftime, sleep, perf_counter
 from datetime import timedelta
-from classes_robo import Config, RoboCopy, HashThread, FileHash, Size, NormString
-
-__parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python' else Path(__executable__).parent
+from rc_classes import Logger, RoboCopy, HashThread, FileHash, Size, NormString
 
 class Copy:
 	'''Copy files using RoboCopy'''
 
-	def __init__(self, src_paths, dst_path, simulate=False, echo=print, kill=None, finish=None):
+	def __init__(self, src_paths, dst_path, settings, config, labels, simulate=False, echo=print, kill=None, finish=None):
 		'''Pass arguments to worker'''
-		self._config = Config(__parent_path__ / 'config.json')
-		self._labels = Config(__parent_path__ / 'labels.json')
-		self._time = strftime('%Y-%m-%d_%H%M')
-		self._userlog_path = Path(self._config.log_dir, strftime(self._config.log_name))
-		self._tsv_path = Path(self._config.log_dir, strftime(self._config.tsv_name))
-		self._pid = f'{getpid():08x}'
+		self._settings = settings
+		self._config = config
+		self._labels = labels
 		self._src_paths = src_paths				# given source paths
 		self._dst_path = dst_path.absolute()	# given destination path
 		self._simulate = simulate				# True to run robocopy with /l = only list files, do not copy app_path, labels,
 		self._echo = echo						# method to show messages (print or from gui)
 		self._kill = kill						# event to stop copy process
 		self._finish = finish					# callback function to be called after copy
-		self._log_dir_path = __parent_path__ / 'logs'	### logging ###
-		if self._log_dir_path.exists():
-			if self._log_dir_path.is_file():
-				raise FileExistsError(f'{self._log_dir_path} is a file')
+		self._logger = Logger(config)			# create logger
+		self._copy_log_path = None				# in case log needs to be copied at the end
+		if self._settings.log_dir_path:			# additional log file for the user
+			if self._settings.log_dir_path.is_relative_to(self._dst_path):
+				self._logger.add(self._settings.log_dir_path)
 			else:
-				now = time()	# purge logs older 7 days
-				for path in self._log_dir_path.glob('*_log.txt'):
-					if now - path.stat().st_mtime > 604800:
-						try:
-							path.unlink()
-						except:
-							pass
-		else:
-			self._log_dir_path.mkdir()
-		self._log_file_path = self._log_dir_path / f'{self._time}_{self._pid}_log.txt'
-		formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-		logger = logging.getLogger()
-		logger.setLevel(logging.INFO)
-		log_fh = logging.FileHandler(filename=self._log_file_path, mode='w', encoding='utf-8')
-		log_fh.setFormatter(formatter)
-		logger.addHandler(log_fh)
-		if self._config.log_dir:	# additional log file for the user
-			userlog_fh = logging.FileHandler(filename=self._userlog_path, mode='w', encoding='utf-8')
-			userlog_fh.setFormatter(formatter)
-			logger.addHandler(userlog_fh)
+				self._copy_log_path = self._settings.log_dir_path
 
 	def _verify_by_size(self):
 		'''Verify copied files by size'''
@@ -151,7 +126,7 @@ class Copy:
 
 	def _write_bad_hashes(self, fh):
 		'''Write TSV with hashes and mismathing hashes in destination'''
-		print(f'{"\t".join(self._hash_thread.keys)}\tbad_{self._config.verify}', file=fh)
+		print(f'{"\t".join(self._hash_thread.keys)}\tbad_{self._settings.verify}', file=fh)
 		for cnt, hash_set in enumerate(self._hash_thread.files, start=1):
 			if self._check_kill_signal():
 				return True
@@ -262,12 +237,12 @@ class Copy:
 			if len_bad_paths > 100:
 				msg += ', ...'
 			self._warning()
-		if self._config.hashes:	### start hashing ###
+		if self._settings.hashes:	### start hashing ###
 			self._info(self._labels.starting_hashing)
-			self._hash_thread = HashThread(self._files, algorithms=self._config.hashes)
+			self._hash_thread = HashThread(self._files, algorithms=self._settings.hashes)
 			self._hash_thread.start()
 		robo_parameters = self._config.robocopy_base_parameters	### robocopy parameters ###
-		robo_parameters.extend(self._config.options)
+		robo_parameters.extend(self._settings.options)
 		if self._simulate:	### add /l parameter for simulation
 			robo_parameters.append('/l')
 		for src_path in src_dir_paths:	### copy directories ###
@@ -293,34 +268,33 @@ class Copy:
 		if self._simulate:	### simulation ###
 			if self._echo_simulation():
 				return
-		elif self._config.verify == 'size':	### check sizes but not hen simulating ###
+		elif self._settings.verify == 'size':	### check sizes but not hen simulating ###
 			if self._verify_by_size():
 				return
-		if self._config.hashes:	### wait until hashing is finished ###
+		if self._settings.hashes:	### wait until hashing is finished ###
 			if self._hash_thread.is_alive():
 				self._info(self._labels.hashing_in_progress)
 				if self._wait_hashing():
 					return
 			self._info(self._labels.hashing_finished)
-		if self._config.log_dir:	### write tsv file when log dir is given ###
-			with self._tsv_path.open('w', encoding='utf-8') as fh:
-				if self._config.verify:
-					if self._config.verify == 'size':
-						if self._config.hashes:
-							if self._write_hashes_bad_sizes(fh):
-								return
+		with self._logger.open_tsv() as fh:
+			if self._settings.verify:
+				if self._settings.verify == 'size':
+					if self._settings.hashes:
+						if self._write_hashes_bad_sizes(fh):
+							return
 						else:
 							if self._write_bad_sizes(fh):
 								return
-					else:
-						if self._write_bad_hashes(fh):
-							return
-				elif self._config.hashes:
-					if self._write_hashes(fh):
-						return
 				else:
-					if self._write_sizes(fh):
+					if self._write_bad_hashes(fh):
 						return
+			elif self._config.hashes:
+				if self._write_hashes(fh):
+					return
+			else:
+				if self._write_sizes(fh):
+					return
 		end_time = perf_counter()
 		delta = end_time - start_time
 		self._info(self._labels.all_done.replace('#', f'{timedelta(seconds=delta)}'))
@@ -330,4 +304,8 @@ class Copy:
 		else:
 			returncode = True
 		logging.shutdown()
+		if self._copy_log_path:
+			self._logger.copy_log_into(self._copy_log_path)
+		if self._settings.log_dir_path:
+			self._logger.copy_tsv_into(self._settings.log_dir_path)
 		return returncode

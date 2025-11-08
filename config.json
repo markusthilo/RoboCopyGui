@@ -1,6 +1,7 @@
 {
-    "log_name": "%y%m%d_%H%M%S_robolog.txt",
-    "tsv_name": "%y%m%d_%H%M%S_robofiles.csv",
+    "log_name": "robolog.txt",
+    "tsv_name": "robofiles.csv",
+    "keep_log": 30,
     "max_echo_len": 79,
     "robocopy_base_parameters": [
         "/fp",

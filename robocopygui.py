@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-11-07'
+__version__ = '0.4.0_2025-11-08'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -22,9 +22,8 @@ from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
 from worker import Copy
-from classes_robo import Config, Settings, FileHash, RoboCopy
+from rc_classes import Config, Settings, Logger, FileHash, RoboCopy
 from tk_pathdialog import askpaths
-from tkinter.messagebox import showinfo
 
 __parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python' else Path(__executable__).parent
 
@@ -185,6 +184,10 @@ class Gui(Tk):
 		self._quit_button.grid(row=6, column=3, sticky='nse', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._quit_button, self._labels.quit_tip)
 		self._init_warning()
+		if errors := Logger.clean(self._config):
+			for path, ex in errors:
+				self.echo(f'{path}: {type(ex)}: {ex}')
+			self._enable_warning()
 
 	def _read_source_paths(self):
 		'''Read paths from text field'''
@@ -203,17 +206,17 @@ class Gui(Tk):
 
 	def _select_source_dir(self):
 		'''Select directory to add into field'''
-		if directory := askdirectory(title=self._labels.select_dir, mustexist=True, initialdir=self._config.initial_dir):
+		if directory := askdirectory(title=self._labels.select_dir, mustexist=True, initialdir=self._settings.src_dir_path):
 			path = Path(directory).absolute()
 			if path in self._read_source_paths():
 				showerror(title=self._labels.error, message=self._labels.already_added.replace('#', f'{path}'))
 				return
 			self._source_text.insert('end', f'{path}\n')
-			self._config.initial_dir = f'{path}'
+			self._settings.src_dir_path = f'{path}'
 
 	def _select_source_files(self):
 		'''Select file(s) to add into field'''
-		if filenames := askopenfilenames(title=self._labels.select_files, initialdir=self._config.initial_dir):
+		if filenames := askopenfilenames(title=self._labels.select_files, initialdir=self._settings.src_dir_path):
 			if len(filenames) == 1:
 				path = Path(filenames[0]).absolute()
 				if path in self._read_source_paths():
@@ -223,7 +226,7 @@ class Gui(Tk):
 				path = Path(filename).absolute()
 				if not path in self._read_source_paths():
 					self._source_text.insert('end', f'{path}\n')
-			self._config.initial_dir = f'{path.parent}'
+			self._settings.src_dir_path = path.parent
 
 	def _select_multiple(self):
 		'''Select multiple files and directories to add into field'''
@@ -231,12 +234,12 @@ class Gui(Tk):
 			title = self._labels.select_multiple,
 			confirm = self._labels.confirm,
 			cancel = self._labels.cancel,
-			initialdir = self._config.initial_dir
+			initialdir = self._settings.src_dir_path
 		):
 			for path in paths:
 				if not path in self._read_source_paths():
 					self._source_text.insert('end', f'{path}\n')
-			self._config.initial_dir = f'{path.parent}'
+			self._settings.src_dir_path = path.parent
 
 	def _get_source_paths(self):
 		'''Get source paths from text field'''

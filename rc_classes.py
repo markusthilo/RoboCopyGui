@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import logging
 from json import load, dump
+from time import time
 from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 from pathlib import Path
 from hashlib import algorithms_available, file_digest
 from threading import Thread
+from os import getpid
+
+__local_path__ = Path().home().joinpath('AppData', 'Local', 'RoboCopyGui')
 
 class Config:
 	'''Load configuration file in JSON format'''
@@ -19,13 +24,15 @@ class Config:
 class Settings:
 	'''Handle user settings'''
 
+	_KEYS = ('src_dir_path', 'dst_dir_path', 'log_dir_path', 'options', 'hashes', 'verify')
+
 	def __init__(self):
 		'''Generate object for setting, try to load from JSON file'''
-		self._path = Path().home().joinpath('AppData', 'Local', 'RoboCopyGui', 'settings.json')
+		self._path = __local_path__ / 'settings.json'
 		try:
 			self.load()
 		except:
-			self._path.mkdir(parents=True, exist_ok=True)
+			self._path.parent.mkdir(parents=True, exist_ok=True)
 		self.src_dir_path = self._get_dir('src_dir_path')
 		self.dst_dir_path = self._get_dir('dst_dir_path')
 		self.log_dir_path = self._get_dir('log_dir_path')
@@ -40,7 +47,68 @@ class Settings:
 	def save(self):
 		'''Save config file'''
 		with self._path.open('w', encoding='utf-8') as fp:
-			dump({key: self.__dict__[key] for key in self._keys}, fp)
+			dump({key: self.__dict__[key] for key in self._KEYS}, fp)
+
+class Logger:
+	'''Handle logging'''
+
+	@staticmethod
+	def clean(config):
+		'''Remove old log and TSV files'''
+		errors = list()
+		if __local_path__.is_dir():
+			now = time()	# purge logs older 7 days
+			keep = 86400 * config.keep_log	# in seconds
+			for path in __local_path__.glob(f'*{config.log_name}'):
+				if now - path.stat().st_mtime > keep:
+					try:
+						path.unlink()
+					except Exception as ex:
+						errors.append((path, ex))
+			for path in __local_path__.glob(f'*{config.tsv_name}'):
+				if now - path.stat().st_mtime > keep:
+					try:
+						path.unlink()
+					except Exception as ex:
+						errors.append((path, ex))
+		else:
+			try:
+				__local_path__.mkdir(parents=True)
+			except Exception as ex:
+				errors.append((path, ex))
+		return errors
+
+	def __init__(self, config):
+		'''Generate object for logging'''
+		prefix = f'{getpid():08x}' + time.strftime('%Y-%m-%d_%H%M%S_')
+		self._log_name = prefix + config.log_name
+		self._tsv_name = prefix + config.tsv_name
+		self._local_log_path = __local_path__ / self._log_name
+		formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+		logger = logging.getLogger()
+		logger.setLevel(logging.INFO)
+		log_fh = logging.FileHandler(filename=self._local_log_path, mode='w', encoding='utf-8')
+		log_fh.setFormatter(formatter)
+		logger.addHandler(log_fh)
+
+	def add(self, dir_path):
+		'''Add file to log'''
+		userlog_fh = logging.FileHandler(filename=dir_path/self._log_name, mode='w', encoding='utf-8')
+		userlog_fh.setFormatter(formatter)
+		logger.addHandler(userlog_fh)
+
+	def copy_log_into(self, dir_path):
+		'''Copy log file to given directory'''
+		dir_path.joinpath(self._log_name).write_bytes(self._local_log_path.read_bytes())
+
+	def open_tsv(self):
+		'''Open TSV file for writing'''
+		self._local_tsv_path = __local_path__ / self._tsv_name
+		return self._local_tsv_path.open('w', encoding='utf-8')
+
+	def copy_tsv_into(self, dir_path):
+		'''Copy TSV file to given directory'''
+		dir_path.joinpath(self._tsv_name).write_bytes(self._local_tsv_path.read_bytes())
 
 class Size(int):
 	'''Human readable size'''
