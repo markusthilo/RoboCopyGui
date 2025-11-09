@@ -3,7 +3,7 @@
 
 import logging
 from json import load, dump
-from time import time
+from time import time, strftime, localtime
 from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 from pathlib import Path
 from hashlib import algorithms_available, file_digest
@@ -21,33 +21,43 @@ class Config:
 			for key, value in load(fp).items():
 				self.__dict__[key] = value
 
-class Settings:
+class Settings(Config):
 	'''Handle user settings'''
 
 	_KEYS = ('src_dir_path', 'dst_dir_path', 'log_dir_path', 'options', 'hashes', 'verify')
 
-	def __init__(self):
+	def __init__(self, config):
 		'''Generate object for setting, try to load from JSON file'''
 		self._path = __local_path__ / 'settings.json'
 		try:
-			self.load()
+			super().__init__(self._path)
 		except:
 			self._path.parent.mkdir(parents=True, exist_ok=True)
 		self.src_dir_path = self._get_dir('src_dir_path')
 		self.dst_dir_path = self._get_dir('dst_dir_path')
 		self.log_dir_path = self._get_dir('log_dir_path')
-		self.options = self.options if 'options' in self.__dict__ else ['/compress', '/z']
-		self.hashes = self.hashes if 'hashes' in self.__dict__ else ['md5']
-		self.verify = self.verify if 'verify' in self.__dict__ else 'size'
+		self.options = self.options if 'options' in self.__dict__ else config.default_options
+		self.hashes = self.hashes if 'hashes' in self.__dict__ else config.default_hashes
+		self.verify = self.verify if 'verify' in self.__dict__ else config.default_verify
 
 	def _get_dir(self, key):
 		'''Get directory path to given key'''
-		return self.__dict__[key] if key in self.__dict__ and self.__dict__[key].is_dir() else None
+		if not key in self.__dict__ or not self.__dict__[key]:
+			return
+		path = Path(self.__dict__[key])
+		if path.is_dir():
+			return path
 
 	def save(self):
 		'''Save config file'''
+		json = dict()
+		for key in self._KEYS:
+			if type(self.__dict__[key])  in (int, str, bool, dict, list) or self.__dict__[key] == None:
+				json[key] = self.__dict__[key]
+			if isinstance(self.__dict__[key], Path):
+				json[key] = f'{self.__dict__[key]}'
 		with self._path.open('w', encoding='utf-8') as fp:
-			dump({key: self.__dict__[key] for key in self._KEYS}, fp)
+			dump(json, fp)
 
 class Logger:
 	'''Handle logging'''
@@ -80,21 +90,21 @@ class Logger:
 
 	def __init__(self, config):
 		'''Generate object for logging'''
-		prefix = f'{getpid():08x}' + time.strftime('%Y-%m-%d_%H%M%S_')
+		prefix = strftime('%Y-%m-%d_%H%M%S', localtime()) + f'_{getpid():04x}_'
 		self._log_name = prefix + config.log_name
 		self._tsv_name = prefix + config.tsv_name
 		self._local_log_path = __local_path__ / self._log_name
-		formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+		self._log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 		logger = logging.getLogger()
 		logger.setLevel(logging.INFO)
 		log_fh = logging.FileHandler(filename=self._local_log_path, mode='w', encoding='utf-8')
-		log_fh.setFormatter(formatter)
+		log_fh.setFormatter(self._log_formatter)
 		logger.addHandler(log_fh)
 
 	def add(self, dir_path):
 		'''Add file to log'''
 		userlog_fh = logging.FileHandler(filename=dir_path/self._log_name, mode='w', encoding='utf-8')
-		userlog_fh.setFormatter(formatter)
+		userlog_fh.setFormatter(self._log_formatter)
 		logger.addHandler(userlog_fh)
 
 	def copy_log_into(self, dir_path):

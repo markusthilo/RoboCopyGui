@@ -29,12 +29,7 @@
             "/nocopy",
             "/copyall"
         ],
-        "/mir": [
-            "/purge"
-        ],
-        "/purge": [
-            "/mir"
-        ],
+        "/purge": [],
         "/z": [
             "/zb",
             "/b"
@@ -52,5 +47,8 @@
         "/it": [],
         "/xjd": [],
         "/xjf": []
-    }
+    },
+    "default_options": ["/compress", "/z"],
+    "default_hashes": ["md5"],
+    "default_verify": "size"
 }

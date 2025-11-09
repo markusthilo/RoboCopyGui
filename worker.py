@@ -11,7 +11,12 @@ from rc_classes import Logger, RoboCopy, HashThread, FileHash, Size, NormString
 class Copy:
 	'''Copy files using RoboCopy'''
 
-	def __init__(self, src_paths, dst_path, settings, config, labels, simulate=False, echo=print, kill=None, finish=None):
+	def __init__(self, src_paths, dst_path, settings, config, labels,
+			simulate = False,
+			echo = print,
+			kill = None,
+			finish = None
+		):
 		'''Pass arguments to worker'''
 		self._settings = settings
 		self._config = config
@@ -26,9 +31,9 @@ class Copy:
 		self._copy_log_path = None				# in case log needs to be copied at the end
 		if self._settings.log_dir_path:			# additional log file for the user
 			if self._settings.log_dir_path.is_relative_to(self._dst_path):
-				self._logger.add(self._settings.log_dir_path)
-			else:
 				self._copy_log_path = self._settings.log_dir_path
+			else:
+				self._logger.add(self._settings.log_dir_path)
 
 	def _verify_by_size(self):
 		'''Verify copied files by size'''
@@ -289,7 +294,7 @@ class Copy:
 				else:
 					if self._write_bad_hashes(fh):
 						return
-			elif self._config.hashes:
+			elif self._settings.hashes:
 				if self._write_hashes(fh):
 					return
 			else:
