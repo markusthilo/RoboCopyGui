@@ -2,123 +2,190 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from json import load, dump
-from time import time, strftime, localtime
-from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 from pathlib import Path
+from json import load, dump
+from time import time, strftime
+from os import getpid
+from traceback import format_exc
+from sys import exc_info
+from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
 from hashlib import algorithms_available, file_digest
 from threading import Thread
-from os import getpid
 
-__local_path__ = Path().home().joinpath('AppData', 'Local', 'RoboCopyGui')
+__parent_path__ = Path(__file__).parent
 
-class Config:
+class Json:
+	'''Handle JSON config file'''
+
+	def __init__(self, path, keys=None):
+		'''Read file'''
+		self.path = path
+		self._keys = list()
+		try:
+			with self.path.open(encoding='utf-8') as fp:
+				for key, value in load(fp).items():
+					self._keys.append(key)
+					if key.endswith('_path'):
+						if value.startswith('~/'):
+							value = Path.home() / value[2:]
+						elif value.startswith('$HOME/'):
+							value = Path.home() / value[6:]
+						try:
+							self.__dict__[key] = Path(value).resolve()
+						except:
+							self.__dict__[key] = None
+					else:
+						self.__dict__[key] = value
+		except:
+			pass
+		if keys:
+			for key in keys:
+				if not key in self._keys:
+					self._keys.append(key)
+					self.__dict__[key] = None
+
+	def save(self):
+		'''Save  file'''
+		self.path.parent.mkdir(parents=True, exist_ok=True)
+		json = dict()
+		for key in self._keys:
+			if isinstance(self.__dict__[key], Path):
+				json[key] = f'{self.__dict__[key]}'
+			else:
+				json[key] = self.__dict__[key]
+		with self.path.open('w', encoding='utf-8') as fp:
+			dump(json, fp)
+
+class Config(Json):
 	'''Load configuration file in JSON format'''
 
-	def __init__(self, path):
+	def __init__(self):
 		'''Read config file'''
-		with path.open(encoding='utf-8') as fp:
-			for key, value in load(fp).items():
-				self.__dict__[key] = value
+		super().__init__(__parent_path__ / 'config.json')
 
-class Settings(Config):
+	def save(self):
+		raise AttributeError('Method <save> is no implemented in class <Config>')
+
+class GuiDefs(Json):
+	'''Load configuration file in JSON format'''
+
+	def __init__(self):
+		'''Read config file'''
+		super().__init__(__parent_path__ / 'gui.json')
+
+	def save(self):
+		raise AttributeError('Method <save> is not implemented in class <GuiDefs>')
+
+class Settings(Json):
 	'''Handle user settings'''
-
-	_KEYS = ('src_dir_path', 'dst_dir_path', 'log_dir_path', 'options', 'hashes', 'verify')
 
 	def __init__(self, config):
 		'''Generate object for setting, try to load from JSON file'''
-		self._path = __local_path__ / 'settings.json'
-		try:
-			super().__init__(self._path)
-		except:
-			self._path.parent.mkdir(parents=True, exist_ok=True)
-		self.src_dir_path = self._get_dir('src_dir_path')
-		self.dst_dir_path = self._get_dir('dst_dir_path')
-		self.log_dir_path = self._get_dir('log_dir_path')
-		self.options = self.options if 'options' in self.__dict__ else config.default_options
-		self.hashes = self.hashes if 'hashes' in self.__dict__ else config.default_hashes
-		self.verify = self.verify if 'verify' in self.__dict__ else config.default_verify
+		super().__init__(
+			config.local_path / config.settings_name,
+			('src_dir_path', 'dst_dir_path', 'log_dir_path', 'options', 'hashes', 'verify', 'lang')
+		)
+		self.options = self.options if self.options else config.default_options
+		self.hashes = self.hashes if self.hashes else config.default_hashes
+		self.verify = self.verify if self.verify else config.default_verify
+		self.lang = self.lang if self.lang else config.default_lang
 
-	def _get_dir(self, key):
-		'''Get directory path to given key'''
-		if not key in self.__dict__ or not self.__dict__[key]:
-			return
-		path = Path(self.__dict__[key])
-		if path.is_dir():
-			return path
+class Labels(Json):
+	'''Load labels file in JSON format'''
+
+	def __init__(self, lang):
+		'''Read labels file'''
+		super().__init__(__parent_path__ / f'labels_{lang}.json')
 
 	def save(self):
-		'''Save config file'''
-		json = dict()
-		for key in self._KEYS:
-			if type(self.__dict__[key])  in (int, str, bool, dict, list) or self.__dict__[key] == None:
-				json[key] = self.__dict__[key]
-			if isinstance(self.__dict__[key], Path):
-				json[key] = f'{self.__dict__[key]}'
-		with self._path.open('w', encoding='utf-8') as fp:
-			dump(json, fp)
+		raise AttributeError('Method <save> is not implemented in class <Labels>')
 
 class Logger:
 	'''Handle logging'''
 
 	@staticmethod
-	def clean(config):
-		'''Remove old log and TSV files'''
-		errors = list()
-		if __local_path__.is_dir():
-			now = time()	# purge logs older 7 days
-			keep = 86400 * config.keep_log	# in seconds
-			for path in __local_path__.glob(f'*{config.log_name}'):
-				if now - path.stat().st_mtime > keep:
-					try:
-						path.unlink()
-					except Exception as ex:
-						errors.append((path, ex))
-			for path in __local_path__.glob(f'*{config.tsv_name}'):
-				if now - path.stat().st_mtime > keep:
-					try:
-						path.unlink()
-					except Exception as ex:
-						errors.append((path, ex))
+	def exception(level, message=None):
+		'''Log exception'''
+		ex_type, ex_text, traceback = exc_info()
+		if ex_type:
+			msg = f'{message}, {ex_type.__name__}: {ex_text}' if message else f'{ex_type.__name__}: {ex_text}'
 		else:
-			try:
-				__local_path__.mkdir(parents=True)
-			except Exception as ex:
-				errors.append((path, ex))
-		return errors
+			msg = message if message else ''
+		if traceback:
+			msg += f'\n{format_exc().strip()}'
+		logging.__dict__[level.lower()](msg)
+
+	@staticmethod
+	def info(msg):
+		'''Print info message'''
+		logging.info(msg)
+
+	@staticmethod
+	def warning(message=None):
+		'''Log warning'''
+		Logger.exception('warning', message=message)
+
+	@staticmethod
+	def error(message=None, exception=None):
+		'''Log error'''
+		Logger.exception('error', message = message)
+
+	@staticmethod
+	def critical(message=None, exception=None):
+		'''Log critical error'''
+		Logger.exception('critical', message=message)
 
 	def __init__(self, config):
 		'''Generate object for logging'''
-		prefix = strftime('%Y-%m-%d_%H%M%S', localtime()) + f'_{getpid():04x}_'
-		self._log_name = prefix + config.log_name
-		self._tsv_name = prefix + config.tsv_name
-		self._local_log_path = __local_path__ / self._log_name
+		prefix = strftime('%Y-%m-%d_%H%M%S') + f'_{getpid():04x}'
+		self._log_name = config.log_name.replace('#', prefix)
+		self._tsv_name = config.tsv_name.replace('#', prefix)
+		self._local_dir_path = config.local_path
 		self._log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-		logger = logging.getLogger()
-		logger.setLevel(logging.INFO)
-		log_fh = logging.FileHandler(filename=self._local_log_path, mode='w', encoding='utf-8')
-		log_fh.setFormatter(self._log_formatter)
-		logger.addHandler(log_fh)
+		self._logger = logging.getLogger()
+		self._logger.setLevel(logging.INFO)
+		config.local_path.mkdir(parents=True, exist_ok=True)
+		self.local_path = self._local_dir_path / self._log_name
+		self._local_fh = logging.FileHandler(filename=self.local_path, mode='w', encoding='utf-8')
+		self._local_fh.setFormatter(self._log_formatter)
+		self._logger.addHandler(self._local_fh)
+		Logger.info(f'Launching application, logging to {self.local_log_path}')
+		now = int(time())	# purge old logs
+		keep = 86400 * config.keep_log	# days in seconds
+		for path in self._local_dir_path.glob(f'*{config.log_name}'):
+			if now - path.stat().st_mtime > keep:
+				try:
+					path.unlink()
+				except:
+					Logger.error(f'Unable to delete expired log file {path}')
+		for path in self._local_dir_path.glob(f'*{config.tsv_name}'):
+			if now - path.stat().st_mtime > keep:
+				try:
+					path.unlink()
+				except:
+					Logger.error(f'Unable to delete expired CSV/TSV file {path}')
+		self.local_log_path = None
 
-	def add(self, dir_path):
-		'''Add file to log'''
-		userlog_fh = logging.FileHandler(filename=dir_path/self._log_name, mode='w', encoding='utf-8')
-		userlog_fh.setFormatter(self._log_formatter)
-		logger.addHandler(userlog_fh)
+	def add_user_log(self, dir_path):
+		'''Add user given file to log'''
+		self.local_log_path = dir_path / self._log_name
+		self._user_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
+		self._user_fh.setFormatter(self._log_formatter)
+		self._logger.addHandler(self._user_fh)
+		Logger.info(f'Now logging to {self.local_log_path} and {self.user_log_path}')
 
 	def copy_log_into(self, dir_path):
-		'''Copy log file to given directory'''
-		dir_path.joinpath(self._log_name).write_bytes(self._local_log_path.read_bytes())
+		'''Copy log file into given directory'''
+		dir_path.joinpath(self._log_name).write_bytes(self.local_log_path.read_bytes())
 
 	def open_tsv(self):
 		'''Open TSV file for writing'''
-		self._local_tsv_path = __local_path__ / self._tsv_name
-		return self._local_tsv_path.open('w', encoding='utf-8')
+		self.local_tsv_path = self._local_dir_path / self._tsv_name
+		return self.local_tsv_path.open('w', encoding='utf-8')
 
 	def copy_tsv_into(self, dir_path):
 		'''Copy TSV file to given directory'''
-		dir_path.joinpath(self._tsv_name).write_bytes(self._local_tsv_path.read_bytes())
+		dir_path.joinpath(self._tsv_name).write_bytes(self.local_tsv_path.read_bytes())
 
 class Size(int):
 	'''Human readable size'''

@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-11-08'
+__version__ = '0.4.0_2025-11-30'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -22,10 +22,10 @@ from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
 from worker import Copy
-from rc_classes import Config, Settings, Logger, FileHash, RoboCopy
+from rc_classes import Config, Settings, Labels, GuiDefs, Logger, FileHash, RoboCopy
 from tk_pathdialog import askpaths
 
-__parent_path__ = Path(__file__).parent if Path(__executable__).stem == 'python' else Path(__executable__).parent
+__parent_path__ = Path(__file__).parent if Path(__executable__).stem.startswith('python') else Path(__executable__).parent
 
 class WorkThread(Thread):
 	'''The worker has tu run as thread not to freeze GUI/Tk'''
@@ -65,21 +65,20 @@ class Gui(Tk):
 
 	def __init__(self):
 		'''Open application window'''
-		super().__init__()
-		self._defs = Config(__parent_path__ / 'gui.json')
-		self.labels = Config(__parent_path__ / 'labels.json')
-		self.config = Config(__parent_path__ / 'config.json')
-		self.config.application = __application__
-		self.config.version = __version__
+		self.config = Config()
 		self.settings = Settings(self.config)
+		self.labels = Labels(self.settings.lang)
+		self._defs = GuiDefs()
+		self._logger = Logger(self.config)
 		self._admin_rights = windll.shell32.IsUserAnAdmin() != 0
 		self._work_thread = None
-		self.title(f'{__application__} v{__version__}')	### define the gui ###
+		super().__init__()	### use tk, define the gui ###
+		self.title(f'{__application__} v{__version__}')
 		for row, weight in enumerate(self._defs.row_weights):
 			self.rowconfigure(row, weight=weight)
 		for column, weight in enumerate(self._defs.column_weights):
 			self.columnconfigure(column, weight=weight)
-		self.iconphoto(True, PhotoImage(file=__parent_path__ / 'appicon.png'))
+		self.iconphoto(True, PhotoImage(file=Path(__file__).parent/self._defs.icon_name))
 		self.protocol('WM_DELETE_WINDOW', self._quit_app)
 		self._font = nametofont('TkTextFont').actual()
 		min_size_x = self._font['size'] * self._defs.x_factor
@@ -189,10 +188,6 @@ class Gui(Tk):
 		self._quit_button.grid(row=6, column=3, sticky='nse', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._quit_button, self.labels.quit_tip)
 		self._init_warning()
-		if errors := Logger.clean(self.config):
-			for path, ex in errors:
-				self.echo(f'{path}: {type(ex)}: {ex}')
-			self._enable_warning()
 
 	def _read_source_paths(self):
 		'''Read paths from text field'''

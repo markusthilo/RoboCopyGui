@@ -1,4 +1,5 @@
 {
+    "icon_name": "appicon.png",
     "pad_factor": 1,
     "x_factor": 80,
     "y_factor": 64,
