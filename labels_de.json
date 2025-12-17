@@ -31,6 +31,8 @@
     "simulate_tip": "Zeigt, welche Dateien erstellt würden, ohne tatsächlich zu kopieren.\nWährend der Simulation kann diese mit dieser Schaltfläche abgebrochen werden.",
     "exec_button": "Kopiervorgang starten",
     "exec_tip": "Startet den rekursiven Kopiervorgang. Die\nzu kopierenden Verzeichnisse und Dateien werden\naus dem Feld oben gelesen.",
+    "language": "Sprache ändern",
+    "language_tip": "Auswahl der Sprachdatei.\nAnwendung muss neu gestartet werden.",
     "shutdown" : "Nach Abschluss herunterfahren",
     "shutdown_tip": "Computer nach Abschluss herunterfahren.",
     "quit": "Beenden",

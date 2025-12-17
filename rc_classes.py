@@ -5,7 +5,6 @@ import logging
 from pathlib import Path
 from json import load, dump
 from time import time, strftime
-from os import getpid
 from traceback import format_exc
 from sys import exc_info
 from subprocess import Popen, PIPE, STDOUT, STARTUPINFO, STARTF_USESHOWWINDOW
@@ -13,6 +12,95 @@ from hashlib import algorithms_available, file_digest
 from threading import Thread
 
 __parent_path__ = Path(__file__).parent
+
+class Logger:
+	'''Handle logging'''
+
+	@staticmethod
+	def exception(level, message=None):
+		'''Log exception'''
+		ex_type, ex_text, traceback = exc_info()
+		if ex_type:
+			msg = f'{message}, {ex_type.__name__}: {ex_text}' if message else f'{ex_type.__name__}: {ex_text}'
+		else:
+			msg = message if message else ''
+		if traceback:
+			msg += f'\n{format_exc().strip()}'
+		logging.__dict__[level.lower()](msg)
+
+	@staticmethod
+	def info(msg):
+		'''Print info message'''
+		logging.info(msg)
+
+	@staticmethod
+	def warning(message=None):
+		'''Log warning'''
+		Logger.exception('warning', message=message)
+
+	@staticmethod
+	def error(message=None, exception=None):
+		'''Log error'''
+		Logger.exception('error', message=message)
+
+	@staticmethod
+	def critical(message=None, exception=None):
+		'''Log critical error'''
+		Logger.exception('critical', message=message)
+
+	def __init__(self, stream, config):
+		'''Generate object for logging'''
+		self._log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+		self._logger = logging.getLogger()
+		self._logger.setLevel(logging.__dict__[config.log_level.upper()])
+		self._streamhandler = logging.StreamHandler(stream=stream)
+		self._streamhandler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+		self._logger.addHandler(self._streamhandler)
+		self._local_dir_path = config.local_path
+		self._local_dir_path.mkdir(parents=True, exist_ok=True)
+		self._ts = strftime('%Y-%m-%d_%H%M%S')
+		self._log_name = config.log_name.replace('#', self._ts)
+		self.local_log_path = self._local_dir_path / self._log_name
+		self._local_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
+		self._local_fh.setFormatter(self._log_formatter)
+		self._logger.addHandler(self._local_fh)
+		Logger.info(f'Launching application, logging to {self.local_log_path}')
+		now = int(time())	# purge old logs
+		keep = 86400 * config.keep_log	# days in seconds
+		for path in self._local_dir_path.glob(f'*{config.log_name}'):
+			if now - path.stat().st_mtime > keep:
+				try:
+					path.unlink()
+				except:
+					Logger.error(f'Unable to delete expired log file {path}')
+		for path in self._local_dir_path.glob(f'*{config.tsv_name}'):
+			if now - path.stat().st_mtime > keep:
+				try:
+					path.unlink()
+				except:
+					Logger.error(f'Unable to delete expired CSV/TSV file {path}')
+		self.local_log_path = None
+
+	def add_user_log(self, dir_path):
+		'''Add user given file to log'''
+		self.local_log_path = dir_path / self._log_name
+		self._user_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
+		self._user_fh.setFormatter(self._log_formatter)
+		self._logger.addHandler(self._user_fh)
+		Logger.info(f'Now logging to {self.local_log_path} and {self.user_log_path}')
+
+	def copy_log_into(self, dir_path):
+		'''Copy log file into given directory'''
+		dir_path.joinpath(self._log_name).write_bytes(self.local_log_path.read_bytes())
+
+	def open_tsv(self):
+		'''Open TSV file for writing'''
+		self.local_tsv_path = self._local_dir_path / self._tsv_name
+		return self.local_tsv_path.open('w', encoding='utf-8')
+
+	def copy_tsv_into(self, dir_path):
+		'''Copy TSV file to given directory'''
+		dir_path.joinpath(self._tsv_name).write_bytes(self.local_tsv_path.read_bytes())
 
 class Json:
 	'''Handle JSON config file'''
@@ -99,93 +187,6 @@ class Labels(Json):
 
 	def save(self):
 		raise AttributeError('Method <save> is not implemented in class <Labels>')
-
-class Logger:
-	'''Handle logging'''
-
-	@staticmethod
-	def exception(level, message=None):
-		'''Log exception'''
-		ex_type, ex_text, traceback = exc_info()
-		if ex_type:
-			msg = f'{message}, {ex_type.__name__}: {ex_text}' if message else f'{ex_type.__name__}: {ex_text}'
-		else:
-			msg = message if message else ''
-		if traceback:
-			msg += f'\n{format_exc().strip()}'
-		logging.__dict__[level.lower()](msg)
-
-	@staticmethod
-	def info(msg):
-		'''Print info message'''
-		logging.info(msg)
-
-	@staticmethod
-	def warning(message=None):
-		'''Log warning'''
-		Logger.exception('warning', message=message)
-
-	@staticmethod
-	def error(message=None, exception=None):
-		'''Log error'''
-		Logger.exception('error', message = message)
-
-	@staticmethod
-	def critical(message=None, exception=None):
-		'''Log critical error'''
-		Logger.exception('critical', message=message)
-
-	def __init__(self, config):
-		'''Generate object for logging'''
-		prefix = strftime('%Y-%m-%d_%H%M%S') + f'_{getpid():04x}'
-		self._log_name = config.log_name.replace('#', prefix)
-		self._tsv_name = config.tsv_name.replace('#', prefix)
-		self._local_dir_path = config.local_path
-		self._log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-		self._logger = logging.getLogger()
-		self._logger.setLevel(logging.INFO)
-		config.local_path.mkdir(parents=True, exist_ok=True)
-		self.local_path = self._local_dir_path / self._log_name
-		self._local_fh = logging.FileHandler(filename=self.local_path, mode='w', encoding='utf-8')
-		self._local_fh.setFormatter(self._log_formatter)
-		self._logger.addHandler(self._local_fh)
-		Logger.info(f'Launching application, logging to {self.local_log_path}')
-		now = int(time())	# purge old logs
-		keep = 86400 * config.keep_log	# days in seconds
-		for path in self._local_dir_path.glob(f'*{config.log_name}'):
-			if now - path.stat().st_mtime > keep:
-				try:
-					path.unlink()
-				except:
-					Logger.error(f'Unable to delete expired log file {path}')
-		for path in self._local_dir_path.glob(f'*{config.tsv_name}'):
-			if now - path.stat().st_mtime > keep:
-				try:
-					path.unlink()
-				except:
-					Logger.error(f'Unable to delete expired CSV/TSV file {path}')
-		self.local_log_path = None
-
-	def add_user_log(self, dir_path):
-		'''Add user given file to log'''
-		self.local_log_path = dir_path / self._log_name
-		self._user_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
-		self._user_fh.setFormatter(self._log_formatter)
-		self._logger.addHandler(self._user_fh)
-		Logger.info(f'Now logging to {self.local_log_path} and {self.user_log_path}')
-
-	def copy_log_into(self, dir_path):
-		'''Copy log file into given directory'''
-		dir_path.joinpath(self._log_name).write_bytes(self.local_log_path.read_bytes())
-
-	def open_tsv(self):
-		'''Open TSV file for writing'''
-		self.local_tsv_path = self._local_dir_path / self._tsv_name
-		return self.local_tsv_path.open('w', encoding='utf-8')
-
-	def copy_tsv_into(self, dir_path):
-		'''Copy TSV file to given directory'''
-		dir_path.joinpath(self._tsv_name).write_bytes(self.local_tsv_path.read_bytes())
 
 class Size(int):
 	'''Human readable size'''

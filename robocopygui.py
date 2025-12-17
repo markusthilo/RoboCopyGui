@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-11-30'
+__version__ = '0.4.0_2025-12-17'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -69,7 +69,6 @@ class Gui(Tk):
 		self.settings = Settings(self.config)
 		self.labels = Labels(self.settings.lang)
 		self._defs = GuiDefs()
-		self._logger = Logger(self.config)
 		self._admin_rights = windll.shell32.IsUserAnAdmin() != 0
 		self._work_thread = None
 		super().__init__()	### use tk, define the gui ###
@@ -174,6 +173,12 @@ class Gui(Tk):
 		self._info_label.grid(row=6, column=1, sticky='nsw', padx=self._pad, pady=(0, self._pad))
 		self._label_fg = self._info_label.cget('foreground')
 		self._label_bg = self._info_label.cget('background')
+
+
+		self._lang_button = Button(self, text=self.labels.language, command=self._change_lang)	### language ###
+		self._lang_button.grid(row=6, column=1, sticky='nwe', padx=self._pad, pady=(0, self._pad))
+		Hovertip(self._lang_button, self.labels.language_tip)
+
 		if self._admin_rights:	### shutdown after finish
 			self._shutdown = BooleanVar(value=False)
 			self._shutdown_button = Checkbutton(self,
@@ -187,7 +192,18 @@ class Gui(Tk):
 		self._quit_button = Button(self, textvariable=self._quit_button_text, command=self._quit_app)
 		self._quit_button.grid(row=6, column=3, sticky='nse', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._quit_button, self.labels.quit_tip)
+		self._logger = Logger(self.echo, self.config)
 		self._init_warning()
+
+	def _change_lang(self):
+		'''Change language'''
+		
+		if self.labels.lang == 'en':
+			self.settings.lang = 'de'
+		else:
+			self.settings.lang = 'en'
+		self.settings.save()
+		showwarning(title=self.labels.warning, message=self.labels.restart_app
 
 	def _read_source_paths(self):
 		'''Read paths from text field'''

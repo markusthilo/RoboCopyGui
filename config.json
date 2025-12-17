@@ -4,6 +4,11 @@
     "log_name": "#_robolog.txt",
     "tsv_name": "#_robofiles.csv",
     "keep_log": 30,
+    "log_level": "debug",
+    "languages": {
+        "English": "en",
+        "Deutsch": "de"
+    },
     "default_lang": "en",
     "max_echo_len": 79,
     "robocopy_base_parameters": [
