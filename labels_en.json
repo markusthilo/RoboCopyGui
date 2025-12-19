@@ -31,7 +31,7 @@
     "simulate_tip": "Shows which files would be created without actually copying.\nDuring the simulation, it can be aborted with this button.",
     "exec_button": "Start Copy Process",
     "exec_tip": "Start the recursive copy process. The\ndirectories and files to be copied are\nread from the field above.",
-    "language": "Change language",
+    "language": "Language",
     "language_tip": "Change the language of the application.\nRestart the application to apply the changes.",
     "shutdown" : "Shutdown when done",
     "shutdown_tip": "Shut down the computer when finished.",

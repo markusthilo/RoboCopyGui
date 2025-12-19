@@ -14,7 +14,7 @@ from pathlib import Path
 from threading import Thread, Event
 from ctypes import windll
 from subprocess import run
-from tkinter import Tk, PhotoImage, StringVar, BooleanVar, Checkbutton, Toplevel
+from tkinter import Tk, PhotoImage, StringVar, BooleanVar, Checkbutton, Toplevel, Radiobutton
 from tkinter.font import nametofont
 from tkinter.ttk import Frame, Label, Entry, Button, Combobox, LabelFrame, Progressbar
 from tkinter.scrolledtext import ScrolledText
@@ -89,16 +89,16 @@ class Gui(Tk):
 		frame = Frame(self)	### source selector
 		frame.grid(row=0, column=0, sticky='nswe')
 		self._source_dir_button = Button(frame, text=self.labels.directory, command=self._select_source_dir)	# source dir button #
-		self._source_dir_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
+		self._source_dir_button.pack(anchor='nw', padx=self._pad, pady=self._pad, expand=True)
 		Hovertip(self._source_dir_button, self.labels.source_dir_tip)
 		self._source_files_button = Button(frame, text=self.labels.files, command=self._select_source_files)	# souce file button
-		self._source_files_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
+		self._source_files_button.pack(anchor='nw', padx=self._pad, pady=self._pad, expand=True)
 		Hovertip(self._source_files_button, self.labels.source_files_tip)
 		self._source_multiple_button = Button(frame, text=self.labels.multiple, command=self._select_multiple)	# multiple button #
-		self._source_multiple_button.pack(anchor='nw', padx=self._pad, pady=self._pad)
+		self._source_multiple_button.pack(anchor='nw', padx=self._pad, pady=self._pad, expand=True)
 		Hovertip(self._source_multiple_button, self.labels.source_multiple_tip)
 		self._clear_source_button = Button(frame, text=self.labels.clear, command=self._clear_source)	# clear source button
-		self._clear_source_button.pack(side='bottom', anchor='sw', padx=self._pad, pady=self._pad)
+		self._clear_source_button.pack(side='bottom', anchor='sw', padx=self._pad, pady=self._pad, expand=True)
 		Hovertip(self._clear_source_button, self.labels.clear_source_tip)
 		self._source_text = ScrolledText(self, # source field
 			font = (self._font['family'], self._font['size']),
@@ -173,12 +173,9 @@ class Gui(Tk):
 		self._info_label.grid(row=6, column=1, sticky='nsw', padx=self._pad, pady=(0, self._pad))
 		self._label_fg = self._info_label.cget('foreground')
 		self._label_bg = self._info_label.cget('background')
-
-
 		self._lang_button = Button(self, text=self.labels.language, command=self._change_lang)	### language ###
-		self._lang_button.grid(row=6, column=1, sticky='nwe', padx=self._pad, pady=(0, self._pad))
+		self._lang_button.grid(row=6, column=0, sticky='nwe', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._lang_button, self.labels.language_tip)
-
 		if self._admin_rights:	### shutdown after finish
 			self._shutdown = BooleanVar(value=False)
 			self._shutdown_button = Checkbutton(self,
@@ -195,15 +192,28 @@ class Gui(Tk):
 		self._logger = Logger(self.echo, self.config)
 		self._init_warning()
 
+	def _set_lang(self, code):
+		'''Set albel language'''
+		self.settings.lang = code
+		self._lang_window.destroy()
+
 	def _change_lang(self):
 		'''Change language'''
-		
-		if self.labels.lang == 'en':
-			self.settings.lang = 'de'
-		else:
-			self.settings.lang = 'en'
-		self.settings.save()
-		showwarning(title=self.labels.warning, message=self.labels.restart_app
+		self._lang_window = Toplevel(self)
+		self._lang_window.title(self.labels.language)
+		Hovertip(self._lang_window, self.labels.quit_tip)
+		old_lang = StringVar(value=self.settings.lang)
+		for lang, code in self.config.languages.items():
+			Radiobutton(self._lang_window,
+				command = lambda: self._set_lang(code),
+				text = lang,
+				variable = old_lang,
+				value = code).pack(padx=self._pad, pady=self._pad)
+		Button(self._lang_window,
+			text = self.labels.quit,
+			command = lambda: self._lang_window.destroy()
+			).pack(padx=self._pad, pady=self._pad)
+		self._lang_window.wait_window()
 
 	def _read_source_paths(self):
 		'''Read paths from text field'''
