@@ -17,6 +17,16 @@ class Logger:
 	'''Handle logging'''
 
 	@staticmethod
+	def debug(message):
+		'''Log debug message'''
+		logging.debug(message)
+
+	@staticmethod
+	def info(message):
+		'''Log info message'''
+		logging.info(message)
+
+	@staticmethod
 	def exception(level, message=None):
 		'''Log exception'''
 		ex_type, ex_text, traceback = exc_info()
@@ -27,11 +37,6 @@ class Logger:
 		if traceback:
 			msg += f'\n{format_exc().strip()}'
 		logging.__dict__[level.lower()](msg)
-
-	@staticmethod
-	def info(msg):
-		'''Print info message'''
-		logging.info(msg)
 
 	@staticmethod
 	def warning(message=None):
@@ -48,11 +53,14 @@ class Logger:
 		'''Log critical error'''
 		Logger.exception('critical', message=message)
 
-	def __init__(self, stream, config):
+	def __init__(self, echo, config):
 		'''Generate object for logging'''
 		self._log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 		self._logger = logging.getLogger()
 		self._logger.setLevel(logging.__dict__[config.log_level.upper()])
+		class stream:	# stream handler using echo
+			def write(message):
+				echo(message.strip())
 		self._streamhandler = logging.StreamHandler(stream=stream)
 		self._streamhandler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
 		self._logger.addHandler(self._streamhandler)
@@ -64,7 +72,7 @@ class Logger:
 		self._local_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
 		self._local_fh.setFormatter(self._log_formatter)
 		self._logger.addHandler(self._local_fh)
-		Logger.info(f'Launching application, logging to {self.local_log_path}')
+		Logger.debug(f'Logging to {self.local_log_path} (level: {config.log_level})')
 		now = int(time())	# purge old logs
 		keep = 86400 * config.keep_log	# days in seconds
 		for path in self._local_dir_path.glob(f'*{config.log_name}'):

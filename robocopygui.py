@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-12-17'
+__version__ = '0.4.0_2025-12-20'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -201,18 +201,21 @@ class Gui(Tk):
 		'''Change language'''
 		self._lang_window = Toplevel(self)
 		self._lang_window.title(self.labels.language)
-		Hovertip(self._lang_window, self.labels.quit_tip)
 		old_lang = StringVar(value=self.settings.lang)
 		for lang, code in self.config.languages.items():
 			Radiobutton(self._lang_window,
-				command = lambda: self._set_lang(code),
 				text = lang,
+				command = lambda: self._set_lang(code),
 				variable = old_lang,
 				value = code).pack(padx=self._pad, pady=self._pad)
 		Button(self._lang_window,
-			text = self.labels.quit,
-			command = lambda: self._lang_window.destroy()
+			text = self.labels.cancel,
+			command = self._lang_window.destroy
 			).pack(padx=self._pad, pady=self._pad)
+		pos_x = self.winfo_x() + (2*self._pad)
+		pos_y = self.winfo_y() + self.winfo_height() - self._lang_window.winfo_reqheight() - (2*self._pad)
+		self._lang_window.geometry(f'+{pos_x}+{pos_y}')
+		Hovertip(self._lang_window, self.labels.language_tip)
 		self._lang_window.wait_window()
 
 	def _read_source_paths(self):
