@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-12-20'
+__version__ = '0.4.0_2025-12-21'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -22,7 +22,7 @@ from tkinter.filedialog import askopenfilenames, askdirectory
 from tkinter.messagebox import showerror, askokcancel, askyesno, showwarning
 from idlelib.tooltip import Hovertip
 from worker import Copy
-from rc_classes import Config, Settings, Labels, GuiDefs, Logger, FileHash, RoboCopy
+from rc_classes import Config, Settings, Labels, GuiDefs, FileHash, RoboCopy
 from tk_pathdialog import askpaths
 
 __parent_path__ = Path(__file__).parent if Path(__executable__).stem.startswith('python') else Path(__executable__).parent
@@ -34,16 +34,14 @@ class WorkThread(Thread):
 		'''Pass arguments to worker'''
 		super().__init__()
 		self._finish = gui.finished
+		return
 		self._kill_event = Event()
-		#try:
 		self._worker = Copy(src_paths, dst_path, gui.settings, gui.config, gui.labels,
-				simulate = simulate,
-				echo = gui.echo,
-				kill = self._kill_event,
-				finish = self._finish
-			)
-		#except Exception as ex:
-		#	self._finish(ex)
+			simulate = simulate,
+			echo = gui.echo,
+			kill = self._kill_event,
+			finish = self._finish
+		)
 
 	def kill(self):
 		'''Kill thread'''
@@ -54,11 +52,9 @@ class WorkThread(Thread):
 		return self._kill_event.is_set()
 
 	def run(self):
-		'''Run thread'''
-		try:
-			self._finish(self._worker.run())
-		except Exception as ex:
-			self._finish(ex)
+		'''Run worker thread'''
+		self._finish(list())	### DEBUG ###
+		#self._finish(self._worker.run())
 
 class Gui(Tk):
 	'''GUI look and feel'''
@@ -189,7 +185,6 @@ class Gui(Tk):
 		self._quit_button = Button(self, textvariable=self._quit_button_text, command=self._quit_app)
 		self._quit_button.grid(row=6, column=3, sticky='nse', padx=self._pad, pady=(0, self._pad))
 		Hovertip(self._quit_button, self.labels.quit_tip)
-		self._logger = Logger(self.echo, self.config)
 		self._init_warning()
 
 	def _set_lang(self, code):

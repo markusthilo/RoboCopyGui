@@ -113,7 +113,7 @@ class Logger:
 class Json:
 	'''Handle JSON config file'''
 
-	def __init__(self, path, keys=None):
+	def __init__(self, path):
 		'''Read file'''
 		self.path = path
 		self._keys = list()
@@ -134,11 +134,6 @@ class Json:
 						self.__dict__[key] = value
 		except:
 			pass
-		if keys:
-			for key in keys:
-				if not key in self._keys:
-					self._keys.append(key)
-					self.__dict__[key] = None
 
 	def save(self):
 		'''Save  file'''
@@ -177,14 +172,23 @@ class Settings(Json):
 
 	def __init__(self, config):
 		'''Generate object for setting, try to load from JSON file'''
-		super().__init__(
-			config.local_path / config.settings_name,
-			('src_dir_path', 'dst_dir_path', 'log_dir_path', 'options', 'hashes', 'verify', 'lang')
-		)
-		self.options = self.options if self.options else config.default_options
-		self.hashes = self.hashes if self.hashes else config.default_hashes
-		self.verify = self.verify if self.verify else config.default_verify
-		self.lang = self.lang if self.lang else config.default_lang
+		super().__init__(config.local_path / config.settings_name)
+		self._keys = ['src_dir_path', 'dst_dir_path', 'log_dir_path', 'options', 'hashes', 'verify', 'lang']
+		attrs = self.__dict__.keys()
+		if not 'src_dir_path' in attrs:
+			self.src_dir_path = None
+		if not 'dst_dir_path' in attrs:
+			self.dst_dir_path = None
+		if not 'log_dir_path' in attrs:
+			self.log_dir_path = None
+		if not 'options' in attrs:
+			self.options = config.default_options
+		if not 'hashes' in attrs:
+			self.hashes = config.default_hashes
+		if not 'verify' in attrs:
+			self.verify = config.default_verify
+		if not 'lang' in attrs:
+			self.lang = config.default_lang
 
 class Labels(Json):
 	'''Load labels file in JSON format'''

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import logging
 from os import getpid
 from pathlib import Path
 from time import strftime, sleep, perf_counter
 from datetime import timedelta
-from rc_classes import Logger, RoboCopy, HashThread, FileHash, Size, NormString
+from rc_classes import Logger as Log
+from rc_classes import RoboCopy, HashThread, FileHash, Size, NormString
 
 class Copy:
 	'''Copy files using RoboCopy'''
@@ -14,20 +14,23 @@ class Copy:
 	def __init__(self, src_paths, dst_path, settings, config, labels,
 			simulate = False,
 			echo = print,
-			kill = None,
-			finish = None
+			kill = None
 		):
 		'''Pass arguments to worker'''
 		self._settings = settings
 		self._config = config
 		self._labels = labels
+		self._errors = list()					# list of errors
 		self._src_paths = src_paths				# given source paths
 		self._dst_path = dst_path.absolute()	# given destination path
 		self._simulate = simulate				# True to run robocopy with /l = only list files, do not copy app_path, labels,
 		self._echo = echo						# method to show messages (print or from gui)
 		self._kill = kill						# event to stop copy process
-		self._finish = finish					# callback function to be called after copy
-		self._logger = Logger(config)			# create logger
+
+		self._logger = Logger(gui.echo, gui.config)
+
+
+
 		self._copy_log_path = None				# in case log needs to be copied at the end
 		if self._settings.log_dir_path:			# additional log file for the user
 			if self._settings.log_dir_path.is_relative_to(self._dst_path):
@@ -37,38 +40,39 @@ class Copy:
 
 	def _verify_by_size(self):
 		'''Verify copied files by size'''
-		self._info(self._labels.starting_size_verification)
+		Log.info(self._labels.starting_size_verification)
 		for cnt, (src_path, src_size, dst_path) in enumerate(self._files, start=1):
 			if self._check_kill_signal():
 				return True
 			self._echo_file_progress(cnt)
 			dst_size = Size(dst_path.stat().st_size)
 			if dst_size != src_size:
-				self._warning(self._labels.mismatching_sizes.replace('#',
+				Log.warning(self._labels.mismatching_sizes.replace('#',
 					f'{src_path}: {src_size}, {dst_path}: {dst_size}')
 				)
 				self._bad_files[dst_path] = dst_size
-		self._info(self._labels.size_check_finished)
+		Log.info(self._labels.size_check_finished)
 
 	def _verify_by_hash(self):
 		'''Verify copied files by hash'''
 		processed_size = Size(0)
-		self._info(self._labels.starting_hash_verification)
+		Log.info(self._labels.starting_hash_verification)
 		for cnt, hash_set in enumerate(self._hash_thread.files, start=1):
 			if self._check_kill_signal():
 				return True
 			self._echo_size_progress(cnt, processed_size)
 			dst_hash = FileHash.hashsum(hash_set['dst_path'], algorithm=self._verify)
 			if dst_hash != hash_set[self._verify]:
-				self._warning(self._labels.mismatching_hashes.replace('#',
+				Log.warning(self._labels.mismatching_hashes.replace('#',
 					f'{hash_set["src_path"]}: {hash_set[self._verify]}, {hash_set["dst_path"]}: {dst_hash}')
 				)
 				self._bad_files[dst_path] = dst_hash
 			processed_size += hash_set['src_size']
+		Log.info(self._labels.hash_check_finished)
 
 	def _echo_simulation(self, fh=None):
 		'''Show what would be copied'''
-		self._info(self._labels.starting_simulation)
+		Log.info(self._labels.starting_simulation)
 		for src_path, size, dst_path in self._files:
 			if self._check_kill_signal():
 				return True
@@ -78,6 +82,7 @@ class Copy:
 				self._bad_files[src_path] = dst_path
 			else:
 				self._echo(f'\u2713 {msg}')
+		Log.info(self._labels.finisjed_simulation)
 
 	def _wait_hashing(self):
 		'''Wait for hash thread to finish'''
@@ -151,29 +156,15 @@ class Copy:
 				line += f'{self._bad_files[hash_set["src_path"]]}'
 			print(line, file=fh)
 
-	def _info(self, msg):
-		'''Log info and echo message'''
-		logging.info(msg)
-		self._echo(msg)
-
-	def _warning(self, msg):
-		'''Log and echo warning'''
-		logging.warning(msg)
-		self._echo( f'{self._labels.warning}: msg')
-
 	def _error(self, msg):
 		'''Log and echo error'''
-		logging.error(msg)
-		logging.shutdown()
-		returncode = f'{self._labels.error}: msg'
-		self._echo(returncode)
-		return returncode
+		Log.error(msg)
+		self._errors.append(msg)
 
 	def _check_kill_signal(self):
 		'''Check if kill signal is set'''
 		if self._kill and self._kill.is_set():
-			self._info(self._labels.aborting_by_user)
-			logging.shutdown()
+			Log.info(self._labels.aborting_by_user)
 			return True
 		return False
 
@@ -192,19 +183,16 @@ class Copy:
 		start_time = perf_counter()		### read source structure ###
 		src_dir_paths = set()	# given directories to copy
 		src_file_paths = set()	# given files to copy
-		self._info(self._labels.reading_source)
+		Log.info(self._labels.reading_source)
 		for path in self._src_paths:
 			try:
 				src_path = path.absolute()
 				if src_path.is_dir():
 					src_dir_paths.add(src_path)
-					continue
-				if src_path.is_file():
+				elif src_path.is_file():
 					src_file_paths.add(src_path)
-					continue
 			except:
-				pass
-			self._error(self._labels.invalid_path.replace('#', f'{path}'))
+				self._error(self._labels.invalid_path.replace('#', f'{path}'))
 		src_dir_paths = list(src_dir_paths)
 		src_file_paths = list(src_file_paths)
 		self._files = list()	# all files to copy (including subdirectories): (path, size)
@@ -235,15 +223,15 @@ class Copy:
 				self._total_size += size
 			except:
 				bad_paths.append(path)
-		self._info(f'{self._labels.done_reading}: {len(self._files)} {self._labels.files}, {self._total_size}')
+		Log.info(f'{self._labels.done_reading}: {len(self._files)} {self._labels.files}, {self._total_size}')
 		if len_bad_paths := len(bad_paths):
 			msg = self._labels.invalid_paths.replace('#', f'{len_bad_paths}')
 			msg += ': ' + ', '.join(f'{path}' for path in bad_paths[:100])
 			if len_bad_paths > 100:
 				msg += ', ...'
-			self._warning()
+			Log.warning()
 		if self._settings.hashes:	### start hashing ###
-			self._info(self._labels.starting_hashing)
+			Log.info(self._labels.starting_hashing)
 			self._hash_thread = HashThread(self._files, algorithms=self._settings.hashes)
 			self._hash_thread.start()
 		robo_parameters = self._config.robocopy_base_parameters	### robocopy parameters ###
@@ -253,7 +241,7 @@ class Copy:
 		for src_path in src_dir_paths:	### copy directories ###
 			dst_path = self._dst_path / src_path.name
 			robocopy = RoboCopy(src_path, dst_path, parameters=robo_parameters)
-			self._info(self._labels.executing.replace('#', f'{robocopy}'))
+			Log.info(self._labels.executing.replace('#', f'{robocopy}'))
 			returncode = robocopy.run(echo=self._echo, max_len=self._config.max_echo_len, kill=self._kill)
 			if self._check_kill_signal():
 				return
@@ -261,13 +249,13 @@ class Copy:
 				self._error(self._labels.robocopy_error.replace('#', f'{returncode}'))
 		for src_path in src_file_paths:	### copy files ###
 			robocopy = RoboCopy(src_path.parent, self._dst_path, file=src_path.name, parameters=robo_parameters)
-			self._info(self._labels.executing.replace('#', f'{robocopy}'))
+			Log.info(self._labels.executing.replace('#', f'{robocopy}'))
 			returncode = robocopy.run(echo=self._echo, max_len=self._config.max_echo_len, kill=self._kill)
 			if self._check_kill_signal():
 				return
 			if returncode >= 8:
 				self._error(self._labels.robocopy_error.replace('#', f'{returncode}'))
-		self._info(self._labels.robocopy_finished)
+		Log.info(self._labels.robocopy_finished)
 		self._total_files = len(self._files)	### post robocopy, hashing might run in parallel ###
 		self._bad_files = dict()
 		if self._simulate:	### simulation ###
@@ -278,10 +266,10 @@ class Copy:
 				return
 		if self._settings.hashes:	### wait until hashing is finished ###
 			if self._hash_thread.is_alive():
-				self._info(self._labels.hashing_in_progress)
+				Log.info(self._labels.hashing_in_progress)
 				if self._wait_hashing():
 					return
-			self._info(self._labels.hashing_finished)
+			Log.info(self._labels.hashing_finished)
 		with self._logger.open_tsv() as fh:
 			if self._settings.verify:
 				if self._settings.verify == 'size':
