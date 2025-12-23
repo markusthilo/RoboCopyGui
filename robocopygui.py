@@ -3,7 +3,7 @@
 
 __application__ = 'RoboCopyGui'
 __author__ = 'Markus Thilo'
-__version__ = '0.4.0_2025-12-21'
+__version__ = '0.4.0_2025-12-23'
 __license__ = 'GPL-3'
 __email__ = 'markus.thilomarkus@gmail.com'
 __status__ = 'Testing'
@@ -34,13 +34,11 @@ class WorkThread(Thread):
 		'''Pass arguments to worker'''
 		super().__init__()
 		self._finish = gui.finished
-		return
 		self._kill_event = Event()
 		self._worker = Copy(src_paths, dst_path, gui.settings, gui.config, gui.labels,
 			simulate = simulate,
 			echo = gui.echo,
-			kill = self._kill_event,
-			finish = self._finish
+			kill = self._kill_event
 		)
 
 	def kill(self):
@@ -53,8 +51,7 @@ class WorkThread(Thread):
 
 	def run(self):
 		'''Run worker thread'''
-		self._finish(list())	### DEBUG ###
-		#self._finish(self._worker.run())
+		self._finish(self._worker.run())
 
 class Gui(Tk):
 	'''GUI look and feel'''

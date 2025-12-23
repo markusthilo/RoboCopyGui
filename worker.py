@@ -26,9 +26,7 @@ class Copy:
 		self._simulate = simulate				# True to run robocopy with /l = only list files, do not copy app_path, labels,
 		self._echo = echo						# method to show messages (print or from gui)
 		self._kill = kill						# event to stop copy process
-
 		self._logger = Logger(gui.echo, gui.config)
-
 
 
 		self._copy_log_path = None				# in case log needs to be copied at the end

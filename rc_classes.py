@@ -72,26 +72,25 @@ class Logger:
 		self._local_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
 		self._local_fh.setFormatter(self._log_formatter)
 		self._logger.addHandler(self._local_fh)
-		Logger.debug(f'Logging to {self.local_log_path} (level: {config.log_level})')
-		now = int(time())	# purge old logs
-		keep = 86400 * config.keep_log	# days in seconds
-		for path in self._local_dir_path.glob(f'*{config.log_name}'):
-			if now - path.stat().st_mtime > keep:
-				try:
-					path.unlink()
-				except:
-					Logger.error(f'Unable to delete expired log file {path}')
-		for path in self._local_dir_path.glob(f'*{config.tsv_name}'):
-			if now - path.stat().st_mtime > keep:
-				try:
-					path.unlink()
-				except:
-					Logger.error(f'Unable to delete expired CSV/TSV file {path}')
-		self.local_log_path = None
+		self._now = int(time())
+		self._keep = 86400 * config.keep_log	# days in seconds
+		Logger.debug(f'Logging to {self.local_log_path} using level {config.log_level})')
+		self._del_expired(config.log_name)
+		self._del_expired(config.tsv_name)
+		self.user_log_path = None
+
+	def _del_expired(self, filename):
+		'''Delete expired log or TSV files'''
+		for path in self._local_dir_path.glob(f'*{filename}'):
+		if self._now - path.stat().st_mtime > self._keep:
+			try:
+				path.unlink()
+			except:
+				Logger.error()
 
 	def add_user_log(self, dir_path):
 		'''Add user given file to log'''
-		self.local_log_path = dir_path / self._log_name
+		self.user_log_path = dir_path / self._log_name
 		self._user_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
 		self._user_fh.setFormatter(self._log_formatter)
 		self._logger.addHandler(self._user_fh)
