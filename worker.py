@@ -26,15 +26,7 @@ class Copy:
 		self._simulate = simulate				# True to run robocopy with /l = only list files, do not copy app_path, labels,
 		self._echo = echo						# method to show messages (print or from gui)
 		self._kill = kill						# event to stop copy process
-		self._logger = Logger(gui.echo, gui.config)
-
-
-		self._copy_log_path = None				# in case log needs to be copied at the end
-		if self._settings.log_dir_path:			# additional log file for the user
-			if self._settings.log_dir_path.is_relative_to(self._dst_path):
-				self._copy_log_path = self._settings.log_dir_path
-			else:
-				self._logger.add(self._settings.log_dir_path)
+		self._logger = Log(self._echo, self._settings, self._config)
 
 	def _verify_by_size(self):
 		'''Verify copied files by size'''
@@ -228,6 +220,14 @@ class Copy:
 			if len_bad_paths > 100:
 				msg += ', ...'
 			Log.warning()
+
+
+		### DEBUG ###
+		return
+
+
+
+
 		if self._settings.hashes:	### start hashing ###
 			Log.info(self._labels.starting_hashing)
 			self._hash_thread = HashThread(self._files, algorithms=self._settings.hashes)

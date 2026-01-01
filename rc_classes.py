@@ -53,7 +53,7 @@ class Logger:
 		'''Log critical error'''
 		Logger.exception('critical', message=message)
 
-	def __init__(self, echo, config):
+	def __init__(self, echo, settings, config):
 		'''Generate object for logging'''
 		self._log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 		self._logger = logging.getLogger()
@@ -68,46 +68,43 @@ class Logger:
 		self._local_dir_path.mkdir(parents=True, exist_ok=True)
 		self._ts = strftime('%Y-%m-%d_%H%M%S')
 		self._log_name = config.log_name.replace('#', self._ts)
-		self.local_log_path = self._local_dir_path / self._log_name
-		self._local_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
+		self._tsv_name = config.tsv_name.replace('#', self._ts)
+		self._local_log_path = self._local_dir_path / self._log_name
+		self._local_fh = logging.FileHandler(filename=self._local_log_path, mode='w', encoding='utf-8')
 		self._local_fh.setFormatter(self._log_formatter)
 		self._logger.addHandler(self._local_fh)
 		self._now = int(time())
-		self._keep = 86400 * config.keep_log	# days in seconds
-		Logger.debug(f'Logging to {self.local_log_path} using level {config.log_level})')
+		self._keep = 60 * config.keep_log	# minutes in seconds
+		self.info(f'Logging to {self._local_log_path} using level {config.log_level})')
 		self._del_expired(config.log_name)
 		self._del_expired(config.tsv_name)
-		self.user_log_path = None
+		self._user_log_path = settings.log_dir_path
+		self._local_tsv_path = None
 
 	def _del_expired(self, filename):
 		'''Delete expired log or TSV files'''
 		for path in self._local_dir_path.glob(f'*{filename}'):
-		if self._now - path.stat().st_mtime > self._keep:
-			try:
-				path.unlink()
-			except:
-				Logger.error()
+			if self._now - path.stat().st_mtime > self._keep:
+				try:
+					path.unlink()
+				except:
+					Logger.error()
 
-	def add_user_log(self, dir_path):
-		'''Add user given file to log'''
-		self.user_log_path = dir_path / self._log_name
-		self._user_fh = logging.FileHandler(filename=self.local_log_path, mode='w', encoding='utf-8')
-		self._user_fh.setFormatter(self._log_formatter)
-		self._logger.addHandler(self._user_fh)
-		Logger.info(f'Now logging to {self.local_log_path} and {self.user_log_path}')
-
-	def copy_log_into(self, dir_path):
-		'''Copy log file into given directory'''
-		dir_path.joinpath(self._log_name).write_bytes(self.local_log_path.read_bytes())
+	def __del__(self):
+		'''Delete log file handler'''
+		self.info('Closing log file')
+		self._logger.removeHandler(self._local_fh)
+		self._local_fh.close()
+		self._logger.removeHandler(self._streamhandler)
+		if self._user_log_path:
+			self._user_log_path.joinpath(self._log_name).write_bytes(self._local_log_path.read_bytes())
+			if self._local_tsv_path:
+				self._user_log_path.joinpath(self._tsv_name).write_bytes(self._local_tsv_path.read_bytes())
 
 	def open_tsv(self):
 		'''Open TSV file for writing'''
-		self.local_tsv_path = self._local_dir_path / self._tsv_name
-		return self.local_tsv_path.open('w', encoding='utf-8')
-
-	def copy_tsv_into(self, dir_path):
-		'''Copy TSV file to given directory'''
-		dir_path.joinpath(self._tsv_name).write_bytes(self.local_tsv_path.read_bytes())
+		self._local_tsv_path = self._local_dir_path / self._tsv_name
+		return self._local_tsv_path.open('w', encoding='utf-8')
 
 class Json:
 	'''Handle JSON config file'''
