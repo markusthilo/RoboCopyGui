@@ -219,15 +219,7 @@ class Copy:
 			msg += ': ' + ', '.join(f'{path}' for path in bad_paths[:100])
 			if len_bad_paths > 100:
 				msg += ', ...'
-			Log.warning()
-
-
-		### DEBUG ###
-		return
-
-
-
-
+			Log.warning(msg)
 		if self._settings.hashes:	### start hashing ###
 			Log.info(self._labels.starting_hashing)
 			self._hash_thread = HashThread(self._files, algorithms=self._settings.hashes)
