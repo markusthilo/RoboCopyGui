@@ -1,3 +1,6 @@
+> [!NOTE]
+> Migrated to https://codeberg.org/markusthilo/RoboCopyGui
+
 # RoboCopyGui
 
 This is a file copy application with a graphical user interface.
